@@ -52,6 +52,8 @@ This is the core feature, aiming to directly modify the clothing mesh to fit the
     - [x] Automate the setup of Modular Avatar's `Blendshape Sync` component.
 - [x] **Material & Shader Utility**:
     - [x] A utility to batch-convert materials on a cloth item to a user-specified shader (e.g., lilToon) and attempt to map textures.
+- [ ] **UI Localization**:
+    - [ ] Add Japanese language support for the editor window UI.
 
 ### Phase 4: Community Features
 
