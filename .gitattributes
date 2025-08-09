@@ -1,0 +1,21 @@
+# Exclude files from being exported in the release archive.
+
+# Test assets
+/Assets/Scenes/ export-ignore
+/Assets/TestAvatars/ export-ignore
+/Assets/TestCloths/ export-ignore
+
+# Project-specific editor files
+/.vsconfig export-ignore
+/VRCloth-Fitter.code-workspace export-ignore
+
+# Git files
+/.gitignore export-ignore
+/.gitattributes export-ignore
+
+# Development documents
+/ROADMAP.md export-ignore
+/ROADMAP(jp).md export-ignore
+
+# Temporary directories
+/vpm-listing-temp/ export-ignore
