@@ -8,11 +8,14 @@ public class VRClothFitterWindow : EditorWindow
     private GameObject avatarObject;
     private GameObject clothObject;
 
-    private Vector2 scrollPositionAvatar;
-    private Vector2 scrollPositionCloth;
+    private Vector2 scrollPosition;
 
     private List<string> avatarBoneNames = new List<string>();
+    private string[] avatarBoneNamesArray;
     private List<string> clothBoneNames = new List<string>();
+    private int[] mappedBoneIndices;
+
+    private const string NO_BONE_SELECTED = "[None]";
 
     [MenuItem("Tools/VRCloth Fitter")]
     public static void ShowWindow()
@@ -32,38 +35,42 @@ public class VRClothFitterWindow : EditorWindow
         clothObject = (GameObject)EditorGUILayout.ObjectField("Cloth", clothObject, typeof(GameObject), true);
         if (EditorGUI.EndChangeCheck())
         {
-            UpdateBoneLists();
+            UpdateBoneData();
         }
 
         EditorGUILayout.Space();
 
-        // ボーンリストの表示エリア
+        // ボーンマッピングエリア
+        GUILayout.Label("Bone Mapping", EditorStyles.boldLabel);
         EditorGUILayout.BeginHorizontal();
-        {
-            // Avatar Bone List
-            EditorGUILayout.BeginVertical(EditorStyles.helpBox);
-            GUILayout.Label("Avatar Bones", EditorStyles.boldLabel);
-            scrollPositionAvatar = EditorGUILayout.BeginScrollView(scrollPositionAvatar);
-            foreach (var boneName in avatarBoneNames)
-            {
-                GUILayout.Label(boneName);
-            }
-            EditorGUILayout.EndScrollView();
-            EditorGUILayout.EndVertical();
-
-            // Cloth Bone List
-            EditorGUILayout.BeginVertical(EditorStyles.helpBox);
-            GUILayout.Label("Cloth Bones", EditorStyles.boldLabel);
-            scrollPositionCloth = EditorGUILayout.BeginScrollView(scrollPositionCloth);
-            foreach (var boneName in clothBoneNames)
-            {
-                GUILayout.Label(boneName);
-            }
-            EditorGUILayout.EndScrollView();
-            EditorGUILayout.EndVertical();
-        }
+        GUILayout.Label("Cloth Bone", EditorStyles.boldLabel);
+        GUILayout.Label("->", GUILayout.Width(20));
+        GUILayout.Label("Avatar Bone", EditorStyles.boldLabel);
         EditorGUILayout.EndHorizontal();
 
+        scrollPosition = EditorGUILayout.BeginScrollView(scrollPosition, EditorStyles.helpBox);
+        {
+            if (clothBoneNames.Count > 0 && avatarBoneNames.Count > 0)
+            {
+                for (int i = 0; i < clothBoneNames.Count; i++)
+                {
+                    EditorGUILayout.BeginHorizontal();
+                    {
+                        // 衣装のボーン名を表示
+                        EditorGUILayout.LabelField(clothBoneNames[i]);
+                        GUILayout.Label("->", GUILayout.Width(20));
+                        // アバターのボーンを選択するドロップダウン
+                        mappedBoneIndices[i] = EditorGUILayout.Popup(mappedBoneIndices[i], avatarBoneNamesArray);
+                    }
+                    EditorGUILayout.EndHorizontal();
+                }
+            }
+            else
+            {
+                GUILayout.Label("Please set Avatar and Cloth objects.");
+            }
+        }
+        EditorGUILayout.EndScrollView();
 
         EditorGUILayout.Space();
 
@@ -74,11 +81,10 @@ public class VRClothFitterWindow : EditorWindow
         }
     }
 
-    private void UpdateBoneLists()
+    private void UpdateBoneData()
     {
+        // アバターのボーンリストを取得
         avatarBoneNames.Clear();
-        clothBoneNames.Clear();
-
         if (avatarObject != null)
         {
             var renderer = avatarObject.GetComponentInChildren<SkinnedMeshRenderer>();
@@ -87,7 +93,11 @@ public class VRClothFitterWindow : EditorWindow
                 avatarBoneNames = renderer.bones.Select(b => b.name).ToList();
             }
         }
+        avatarBoneNames.Insert(0, NO_BONE_SELECTED); // 未選択オプションを追加
+        avatarBoneNamesArray = avatarBoneNames.ToArray();
 
+        // 衣装のボーンリストを取得
+        clothBoneNames.Clear();
         if (clothObject != null)
         {
             var renderer = clothObject.GetComponentInChildren<SkinnedMeshRenderer>();
@@ -95,6 +105,14 @@ public class VRClothFitterWindow : EditorWindow
             {
                 clothBoneNames = renderer.bones.Select(b => b.name).ToList();
             }
+        }
+
+        // マッピングを初期化・自動設定
+        mappedBoneIndices = new int[clothBoneNames.Count];
+        for (int i = 0; i < clothBoneNames.Count; i++)
+        {
+            int foundIndex = avatarBoneNames.FindIndex(bName => bName == clothBoneNames[i]);
+            mappedBoneIndices[i] = (foundIndex != -1) ? foundIndex : 0; // 見つからなければ[None]
         }
         
         Repaint();
@@ -126,21 +144,25 @@ public class VRClothFitterWindow : EditorWindow
         // アバターのボーンを名前をキーにした辞書に変換
         var avatarBones = avatarRenderer.bones.ToDictionary(b => b.name, b => b);
         
-        // 衣装の新しいボーン配列を作成
+        // UIのマッピング情報に基づいて新しいボーン配列を作成
         var newClothBones = new Transform[clothRenderer.bones.Length];
         bool allBonesFound = true;
 
         for (int i = 0; i < clothRenderer.bones.Length; i++)
         {
-            string boneName = clothRenderer.bones[i].name;
-            if (avatarBones.TryGetValue(boneName, out Transform avatarBone))
+            int selectedIndex = mappedBoneIndices[i];
+            if (selectedIndex > 0) // 0は[None]なので無視
             {
-                newClothBones[i] = avatarBone;
+                string selectedBoneName = avatarBoneNamesArray[selectedIndex];
+                if (avatarBones.TryGetValue(selectedBoneName, out Transform avatarBone))
+                {
+                    newClothBones[i] = avatarBone;
+                }
             }
             else
             {
-                Debug.LogWarning($"AvatarにClothのボーン '{boneName}' が見つかりませんでした。");
-                newClothBones[i] = clothRenderer.bones[i]; // 見つからない場合は元のボーンを維持
+                Debug.LogWarning($"Clothのボーン '{clothBoneNames[i]}' に対応するAvatarのボーンが設定されていません。");
+                newClothBones[i] = clothRenderer.bones[i]; // 元のボーンを維持
                 allBonesFound = false;
             }
         }
@@ -162,7 +184,7 @@ public class VRClothFitterWindow : EditorWindow
         }
         else
         {
-            EditorUtility.DisplayDialog("Warning", "いくつかのボーンが見つからなかったため、処理は不完全かもしれません。詳細はConsoleを確認してください。", "OK");
+            EditorUtility.DisplayDialog("Warning", "いくつかのボーンが未設定です。処理は不完全かもしれません。詳細はConsoleを確認してください。", "OK");
         }
     }
 }
