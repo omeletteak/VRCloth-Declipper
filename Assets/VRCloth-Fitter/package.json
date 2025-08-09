@@ -1,0 +1,14 @@
+{
+  "name": "dev.omelette.vrcloth-fitter",
+  "displayName": "VRCloth-Fitter",
+  "version": "1.0.0",
+  "description": "A tool to easily fit clothes to your VRChat avatar.",
+  "unity": "2019.4",
+  "author": {
+    "name": "omeletteak"
+  },
+  "dependencies": {
+    "nadena.dev.ndmf": "1.0.0",
+    "nadena.dev.modular-avatar": "1.0.0"
+  }
+}
