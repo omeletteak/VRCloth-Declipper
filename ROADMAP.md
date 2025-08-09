@@ -1,66 +1,65 @@
-# VRCloth-Fitter
+# VRCloth-Fitter Development Roadmap
 
-高度な衣装改変ツールのオープンソース代替品が必要であるという考えに基づき開発された、VRChatアバターに衣装を簡単にフィットさせるためのツールです。
+This document outlines the development plan and feature history for VRCloth-Fitter.
 
-## ロードマップ
+## Goal
 
-このツールの目標は、アバターの衣装カスタマイズのための堅牢でコミュニティ主導の機能を提供することです。開発は以下のフェーズで計画されています。
+The goal of this tool is to provide a robust, community-driven suite of features for avatar outfit customization, ensuring a non-destructive workflow.
 
-### フェーズ1：基本的なスケールフィッティング
+### Phase 1: Basic Scale Fitting
 
-このフェーズでは、アバターのプロポーションに合わせて衣装のボーンスケールを調整することに焦点を当てます。
+This phase focuses on adjusting the scale of clothing bones to match the avatar's proportions.
 
-- [x] **ボーンマッピングUI**:
-    - [x] アバターと衣装のボーンを名前の一致に基づいて自動的に検出し、対応するペアをリスト化する。
-    - [x] ユーザーが手動でボーンの対応付けを編集・確定できるUIを提供する。
-- [x] **スケール計算**:
-    - [x] ボーンの「長さ」（子ボーンまでの距離）を計算する。
-    - [x] 周辺のメッシュ頂点を分析し、ボーン周りの「太さ」や「ボリューム」を推定する。
-- [x] **スケーリングの適用（非破壊ワークフロー）**:
-    - [x] 計算したスケール比率を保存するための専用コンポーネント（`VRClothFitterScalingData`）を作成する。
-    - [x] エディタウィンドウは、衣装のボーンを直接変更するのではなく、このコンポーネントにスケール情報をデータとして書き込む。
-    - [x] Modular Avatarのビルドプロセス（NDMF）にフックし、アバタービルド時にのみ、保存されたデータに基づいて一時オブジェクトのボーンスケールを適用する処理を実装する。
-- [x] **機能改善**:
-    - [x] スケール計算にボーンの「太さ」の考慮を追加し、より立体的なフィットを実現する。
-    - [x] 変更がリアルタイムで確認できるプレビュー機能を追加する。
-    - [x] ボーンマッピングのUXを向上させる（例：Humanoidボーンのハイライト）。
+- [x] **Bone Mapping UI**:
+    - [x] Automatically detect and list bone pairs between the avatar and the cloth based on name matching.
+    - [x] Provide a user interface to manually edit and confirm these bone mappings.
+- [x] **Scale Calculation**:
+    - [x] Calculate the "length" of a bone (distance to its child).
+    - [x] Analyze surrounding mesh vertices to estimate the "thickness" or "volume" around a bone.
+- [x] **Scaling Application (Non-Destructive Workflow)**:
+    - [x] Create a dedicated component (`VRClothFitterScalingData`) to store the calculated scale ratios.
+    - [x] The editor window writes the scale information to this component instead of modifying bones directly.
+    - [x] Implement an NDMF pass to apply the stored scale data to temporary objects during the avatar build process.
+- [x] **Feature Improvements**:
+    - [x] Add consideration for bone "thickness" to the scale calculation for a more three-dimensional fit.
+    - [x] Add a real-time preview feature for immediate feedback.
+    - [x] Improve Bone Mapping UX (e.g., highlighting Humanoid bones).
 
-### フェーズ2：高度なメッシュ変形（プロポーション改変）
+### Phase 2: Advanced Mesh Deformation
 
-これが中核機能であり、アバターの体型に合わせて衣装のメッシュを直接変形させることを目指します。
+This is the core feature, aiming to directly modify the clothing mesh to fit the avatar's body shape.
 
-- [x] **変形データ用コンポーネント**:
-    - [x] 変形に必要な情報をすべて保存するための新しいコンポーネント `VRClothFitterDeformationData` を作成し、非破壊的なワークフローを保証する。このコンポーネントは、コントロールポイントのペアのリストを保持する。
-- [x] **コントロールポイント（アンカー）システム**:
-    - [x] **ステップ1: カスタムエディタの作成**: `VRClothFitterDeformationData`コンポーネントのデフォルトインスペクタを置き換えるための、カスタムエディタスクリプトの雛形を作成する。
-    - [x] **ステップ2: アンカー編集モード**: インスペクタ上に「アンカー編集モードを開始」ボタンを実装する。このモード中は、シーンビューでの通常の操作を無効化する。
-    - [x] **ステップ3: メッシュへのレイキャスト**: シーンビュー上でマウスカーソルがアバターまたは衣装のメッシュ上にあるとき、その表面上の点を検出（レイキャスト）できるようにする。
-    - [x] **ステップ4: アンカーの配置と可視化**: メッシュ上でクリックされた位置にアンカー（ギズモ）を配置し、シーンビューに表示する。アバター用と衣装用で色を分ける。
-    - [x] **ステップ5: アンカーペアの作成とデータ保存**: 配置されたアバターアンカーと衣装アンカーをペアとして`VRClothFitterDeformationData`に保存するロジックを実装する。対応するペアは線で結んで可視化する。
-- [x] **メッシュ変形アルゴリズム**:
-    - [x] **差分ベクトルの計算**: 各アンカーペアについて、アバターと衣装のアンカー位置の差分ベクトル（移動量）を計算する。
-    - [x] **加重平均による頂点移動**: 衣装メッシュの各頂点について、すべてのアンカーからの距離に応じた重み付けを行い、差分ベクトルを合成して新しい頂点位置を決定する。
-- [x] **NDMF Passによる非破壊的な適用**:
-    - [x] アバターのビルドプロセス中に実行される新しいNDMF Passを作成する。
-    - [x] このPassは`VRClothFitterDeformationData`を検索し、そのデータに基づいて元の衣装メッシュを複製・変形させた**新しいメッシュアセットを生成**する。
-    - [x] ビルド中の一時オブジェクトが持つ`SkinnedMeshRenderer`のメッシュを、この新しい変形済みメッシュに差し替える。
-    - [x] 最終的にビルドされたアバターからは`VRClothFitterDeformationData`コンポーネントを削除する。
+- [x] **Deformation Data Component**:
+    - [x] Create a new component `VRClothFitterDeformationData` to store all necessary deformation information, ensuring a non-destructive workflow. This component holds a list of control point pairs.
+- [x] **Control Point (Anchor) System**:
+    - [x] **Step 1: Custom Editor**: Create a custom editor script to replace the default inspector for the `VRClothFitterDeformationData` component.
+    - [x] **Step 2: Anchor Edit Mode**: Implement an "Anchor Edit Mode" button in the inspector, which disables normal scene view interactions.
+    - [x] **Step 3: Mesh Raycasting**: Implement the ability to detect points on the surface of the avatar or cloth mesh when the user clicks in the scene view.
+    - [x] **Step 4: Anchor Placement & Visualization**: Place and display anchors (gizmos) at the clicked positions in the scene view, using different colors for avatar and cloth anchors.
+    - [x] **Step 5: Anchor Pair Creation & Data Storage**: Implement the logic to save the placed avatar and cloth anchors as a pair in the `VRClothFitterDeformationData` component and visualize the pair with a connecting line.
+- [x] **Mesh Deformation Algorithm**:
+    - [x] **Calculate Difference Vectors**: For each anchor pair, calculate the difference vector (displacement) between the avatar and cloth anchor positions.
+    - [x] **Weighted Average Vertex Movement**: For each vertex in the cloth mesh, determine its new position by calculating a weighted average of the difference vectors based on its distance to all anchors.
+- [x] **Non-Destructive Application via NDMF Pass**:
+    - [x] Create a new NDMF Pass that executes during the avatar build process.
+    - [x] This pass finds the `VRClothFitterDeformationData`, generates a new, deformed mesh asset by duplicating and modifying the original, and replaces the mesh on the `SkinnedMeshRenderer` of the temporary object.
+    - [x] The `VRClothFitterDeformationData` component is removed from the final built avatar.
 
-### フェーズ3：機能拡張
+### Phase 3: Feature Enhancements
 
-- [x] **ブレンドシェイプ（シェイプキー）同期**:
-    - [x] アバターのブレンドシェイプを衣装の対応するブレンドシェイプ（例：`Breasts_Big`）にリンクさせるUIを作成する。
-    - [x] Modular Avatarの`Blendshape Sync`コンポーネントのセットアップを自動化する。
-- [x] **マテリアル＆シェーダーユーティリティ**:
-    - [x] 衣装アイテムのマテリアルを、ユーザーが指定したシェーダー（例：lilToon）に一括で変換し、テクスチャの割り当てを試みるユーティリティ。
+- [x] **Blendshape (Shape Key) Sync**:
+    - [x] Create a UI to link avatar blendshapes to corresponding cloth blendshapes.
+    - [x] Automate the setup of Modular Avatar's `Blendshape Sync` component.
+- [x] **Material & Shader Utility**:
+    - [x] A utility to batch-convert materials on a cloth item to a user-specified shader (e.g., lilToon) and attempt to map textures.
 
-### フェーズ4：コミュニティ機能
+### Phase 4: Community Features
 
-- [x] **プリセットのインポート/エクスポート**:
-    - [x] スケール調整（フェーズ1）およびメッシュ変形（フェーズ2）のデータをJSONファイルとしてエクスポートする機能を実装する。
-    - [x] JSONファイルには、対象のアバターや衣装名などのメタデータを含める。
-    - [x] JSONプリセットファイルをインポートし、対応するコンポーネントにデータを復元する機能を実装する。
+- [x] **Preset Import/Export**:
+    - [x] Implement functionality to export scaling (Phase 1) and mesh deformation (Phase 2) data as JSON files.
+    - [x] Include metadata such as the target avatar and cloth names in the JSON file.
+    - [x] Implement functionality to import JSON preset files and restore the data to the corresponding components.
 
 ---
 
-*このロードマップは、コミュニティからのフィードバックや開発の進捗に応じて変更される可能性があります。*
+*This roadmap is subject to change based on community feedback and development progress.*
