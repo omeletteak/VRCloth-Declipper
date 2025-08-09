@@ -8,6 +8,10 @@ public class VRClothFitterDeformationDataEditor : Editor
     private static bool isEditMode = false;
     private static VRClothFitterDeformationData currentTarget;
 
+    // Temporary colliders for raycasting
+    private static MeshCollider avatarCollider;
+    private static MeshCollider clothCollider;
+
     public override void OnInspectorGUI()
     {
         DrawDefaultInspector();
@@ -23,12 +27,11 @@ public class VRClothFitterDeformationDataEditor : Editor
             if (isEditMode)
             {
                 currentTarget = (VRClothFitterDeformationData)target;
-                // Ensure the scene view repaints to activate our custom GUI
-                SceneView.RepaintAll(); 
+                SetupEditMode();
             }
             else
             {
-                currentTarget = null;
+                TeardownEditMode();
             }
         }
         GUI.color = Color.white;
@@ -39,23 +42,77 @@ public class VRClothFitterDeformationDataEditor : Editor
         }
     }
 
-    private void OnSceneGUI()
+    private void OnDisable()
     {
-        // Only run our scene GUI logic if we are in edit mode and editing this specific component.
-        if (!isEditMode || currentTarget != (VRClothFitterDeformationData)target)
+        TeardownEditMode();
+    }
+
+    private void SetupEditMode()
+    {
+        var data = (VRClothFitterDeformationData)target;
+        if (data.avatarRoot == null)
         {
+            Debug.LogError("Avatar Root is not set in the component.");
+            isEditMode = false;
             return;
         }
 
-        // This line "consumes" mouse events in the scene view, preventing default selection/manipulation.
+        // Add temporary colliders for raycasting
+        avatarCollider = AddTempCollider(data.avatarRoot);
+        clothCollider = AddTempCollider(data.gameObject);
+
+        SceneView.RepaintAll();
+    }
+
+    private void TeardownEditMode()
+    {
+        if (avatarCollider != null) DestroyImmediate(avatarCollider);
+        if (clothCollider != null) DestroyImmediate(clothCollider);
+        isEditMode = false;
+        currentTarget = null;
+        SceneView.RepaintAll();
+    }
+
+    private MeshCollider AddTempCollider(GameObject obj)
+    {
+        var renderer = obj.GetComponentInChildren<SkinnedMeshRenderer>();
+        if (renderer == null) return null;
+
+        var collider = renderer.gameObject.AddComponent<MeshCollider>();
+        collider.sharedMesh = renderer.sharedMesh;
+        collider.hideFlags = HideFlags.HideAndDontSave; // This is a temporary component
+        return collider;
+    }
+
+    private void OnSceneGUI()
+    {
+        if (!isEditMode || currentTarget != (VRClothFitterDeformationData)target) return;
+
         HandleUtility.AddDefaultControl(GUIUtility.GetControlID(FocusType.Passive));
 
-        // The logic for raycasting and placing anchors will be added here in the next step.
-        
-        // Ensure the scene view keeps updating while in edit mode.
+        if (Event.current.type == EventType.MouseDown && Event.current.button == 0)
+        {
+            Ray ray = HandleUtility.GUIPointToWorldRay(Event.current.mousePosition);
+            
+            if (clothCollider != null && clothCollider.Raycast(ray, out RaycastHit clothHit, 100f))
+            {
+                Vector3 localPos = clothCollider.transform.InverseTransformPoint(clothHit.point);
+                Debug.Log($"[Cloth] Hit at local position: {localPos}");
+                // Anchor creation logic will go here
+            }
+            else if (avatarCollider != null && avatarCollider.Raycast(ray, out RaycastHit avatarHit, 100f))
+            {
+                Vector3 localPos = avatarCollider.transform.InverseTransformPoint(avatarHit.point);
+                Debug.Log($"[Avatar] Hit at local position: {localPos}");
+                // Anchor creation logic will go here
+            }
+            
+            Event.current.Use();
+        }
+
         if (Event.current.type == EventType.Repaint)
         {
-            // Custom drawing for anchors will go here.
+            // Anchor drawing logic will go here
         }
     }
 }

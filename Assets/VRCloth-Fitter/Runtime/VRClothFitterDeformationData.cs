@@ -19,6 +19,9 @@ namespace VRClothFitter
     [AddComponentMenu("VRCloth Fitter/Deformation Data")]
     public class VRClothFitterDeformationData : MonoBehaviour
     {
+        [Tooltip("The root of the avatar this cloth is intended for.")]
+        public GameObject avatarRoot;
+
         [Tooltip("List of anchor pairs that define the mesh deformation.")]
         public List<DeformationAnchorPair> anchorPairs = new List<DeformationAnchorPair>();
     }
