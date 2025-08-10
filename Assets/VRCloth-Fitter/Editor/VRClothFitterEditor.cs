@@ -388,9 +388,28 @@ namespace VRClothFitter
 
         private void StartPreview()
         {
+            Debug.Log("StartPreview: Attempting to start preview...");
+
             var scalingData = clothObject.GetComponent<VRClothFitterScalingData>();
-            var clothRenderer = clothObject.GetComponent<SkinnedMeshRenderer>();
-            if (scalingData == null || clothRenderer == null) return;
+            var clothRenderer = clothObject.GetComponentInChildren<SkinnedMeshRenderer>();
+
+            if (scalingData == null)
+            {
+                Debug.LogError("StartPreview: VRClothFitterScalingData component not found. Please calculate scales first.");
+                return;
+            }
+            if (clothRenderer == null)
+            {
+                Debug.LogError("StartPreview: SkinnedMeshRenderer component not found on cloth object or its children.");
+                return;
+            }
+            if (scalingData.boneScales == null || scalingData.boneScales.Count == 0)
+            {
+                Debug.LogWarning("StartPreview: BoneScales list is empty. No data to preview.");
+                return;
+            }
+
+            Debug.Log($"StartPreview: Found {scalingData.boneScales.Count} bone scales to apply.");
 
             originalBoneScales = new Dictionary<Transform, Vector3>();
             foreach (var bone in clothRenderer.bones)
@@ -398,12 +417,21 @@ namespace VRClothFitter
                 if (bone != null) originalBoneScales[bone] = bone.localScale;
             }
 
+            int appliedCount = 0;
             foreach (var info in scalingData.boneScales)
             {
                 var bone = clothRenderer.bones.FirstOrDefault(b => b.name == info.boneName);
-                if (bone != null) bone.localScale = Vector3.Scale(bone.localScale, info.scale);
+                if (bone != null)
+                {
+                    bone.localScale = Vector3.Scale(bone.localScale, info.scale);
+                    appliedCount++;
+                }
             }
+            
+            Debug.Log($"StartPreview: Applied scales to {appliedCount} bones.");
+
             isPreviewing = true;
+            Debug.Log("StartPreview: Preview started successfully.");
         }
 
         private void StopPreview()

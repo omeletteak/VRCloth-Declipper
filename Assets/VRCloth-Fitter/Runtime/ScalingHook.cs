@@ -6,12 +6,12 @@ using System.Collections.Generic;
 namespace VRClothFitter
 {
     [DisallowMultipleComponent]
-    internal class ScalingHook : MonoBehaviour, IEditorOnly
+    public class ScalingHook : MonoBehaviour, IEditorOnly
     {
         // This component is just a marker to trigger the hook.
     }
 
-    internal class ScalingPass : Pass<ScalingPass>
+    public class ScalingPass : Pass<ScalingPass>
     {
         public override string DisplayName => "Apply VRClothFitter Scaling";
 

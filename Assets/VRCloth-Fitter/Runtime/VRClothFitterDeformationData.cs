@@ -9,11 +9,11 @@ namespace VRClothFitter
         [Tooltip("Name for reference in the editor.")]
         public string name;
         
-        [Tooltip("Anchor position on the Avatar mesh, in local space.")]
-        public Vector3 avatarAnchor;
+        [Tooltip("Anchor transform on the Avatar.")]
+        public Transform avatarAnchor;
 
-        [Tooltip("Corresponding anchor position on the Cloth mesh, in local space.")]
-        public Vector3 clothAnchor;
+        [Tooltip("Corresponding anchor transform on the Cloth.")]
+        public Transform clothAnchor;
     }
 
     [System.Serializable]

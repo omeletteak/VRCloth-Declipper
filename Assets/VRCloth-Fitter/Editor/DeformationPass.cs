@@ -21,7 +21,7 @@ namespace VRClothFitter
         protected override void Configure()
         {
             InPhase(BuildPhase.Transforming)
-                .BeforePlugin("nadena.dev.modular-avatar")
+                .AfterPlugin("nadena.dev.modular-avatar")
                 .Run("Deform cloth mesh", ctx =>
                 {
                     var deformationDataComponents = ctx.AvatarRootObject.GetComponentsInChildren<VRClothFitterDeformationData>(true);
@@ -34,53 +34,76 @@ namespace VRClothFitter
                             continue;
                         }
 
-                        // Create a new, unique mesh to deform (non-destructive)
+                        var validAnchorPairs = data.anchorPairs.Where(p => p.clothAnchor != null && p.avatarAnchor != null).ToList();
+                        if (validAnchorPairs.Count == 0) continue;
+
                         var originalMesh = renderer.sharedMesh;
                         var newMesh = Object.Instantiate(originalMesh);
                         newMesh.name = $"{originalMesh.name} (Deformed)";
                         
-                        var vertices = newMesh.vertices;
+                        var vertices = originalMesh.vertices;
+                        var normals = originalMesh.normals;
                         var newVertices = new Vector3[vertices.Length];
-                        
-                        // Calculate displacement vectors for each anchor
-                        var displacements = data.anchorPairs.Select(p => p.avatarAnchor - p.clothAnchor).ToList();
+                        var newNormals = new Vector3[normals.Length];
 
-                        // Deform vertices
+                        var deformationMatrices = validAnchorPairs.Select(p => 
+                            p.avatarAnchor.localToWorldMatrix * p.clothAnchor.worldToLocalMatrix
+                        ).ToList();
+
                         for (int i = 0; i < vertices.Length; i++)
                         {
-                            var totalWeight = 0f;
-                            var totalDisplacement = Vector3.zero;
+                            var clothTransform = renderer.transform;
+                            var worldVertex = clothTransform.TransformPoint(vertices[i]);
+                            
+                            float totalWeight = 0f;
+                            var avgTranslation = Vector3.zero;
+                            var avgRotation = new Quaternion(0, 0, 0, 0);
+                            var avgScale = Vector3.zero;
 
-                            for (int j = 0; j < data.anchorPairs.Count; j++)
+                            for (int j = 0; j < validAnchorPairs.Count; j++)
                             {
-                                float dist = Vector3.Distance(vertices[i], data.anchorPairs[j].clothAnchor);
-                                float weight = 1.0f / (dist * dist + 0.0001f); // Inverse square distance with a small epsilon
+                                var clothAnchorWorldPos = validAnchorPairs[j].clothAnchor.position;
+                                float dist = Vector3.Distance(worldVertex, clothAnchorWorldPos);
+                                float weight = 1.0f / (dist * dist + 0.0001f);
+
+                                var matrix = deformationMatrices[j];
+                                avgTranslation += (Vector3)matrix.GetColumn(3) * weight;
+                                avgRotation.x += matrix.rotation.x * weight;
+                                avgRotation.y += matrix.rotation.y * weight;
+                                avgRotation.z += matrix.rotation.z * weight;
+                                avgRotation.w += matrix.rotation.w * weight;
+                                avgScale += matrix.lossyScale * weight;
                                 
-                                totalDisplacement += displacements[j] * weight;
                                 totalWeight += weight;
                             }
 
                             if (totalWeight > 0)
                             {
-                                newVertices[i] = vertices[i] + totalDisplacement / totalWeight;
+                                avgTranslation /= totalWeight;
+                                avgRotation.x /= totalWeight;
+                                avgRotation.y /= totalWeight;
+                                avgRotation.z /= totalWeight;
+                                avgRotation.w /= totalWeight;
+                                avgScale /= totalWeight;
+
+                                var finalMatrix = Matrix4x4.TRS(avgTranslation, avgRotation.normalized, avgScale);
+                                newVertices[i] = finalMatrix.MultiplyPoint3x4(vertices[i]);
+                                newNormals[i] = finalMatrix.inverse.transpose.MultiplyVector(normals[i]).normalized;
                             }
                             else
                             {
                                 newVertices[i] = vertices[i];
+                                newNormals[i] = normals[i];
                             }
                         }
 
                         newMesh.vertices = newVertices;
-                        newMesh.RecalculateNormals();
+                        newMesh.normals = newNormals;
                         newMesh.RecalculateBounds();
+                        newMesh.RecalculateTangents();
                         
-                        // Save the new mesh as an asset
                         AssetDatabase.AddObjectToAsset(newMesh, ctx.AssetContainer);
-                        
-                        // Apply the new mesh
                         renderer.sharedMesh = newMesh;
-                        
-                        // Clean up the component
                         Object.DestroyImmediate(data);
                     }
                 });
