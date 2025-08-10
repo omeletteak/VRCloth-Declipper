@@ -18,17 +18,17 @@ This phase marks a fundamental shift in architecture to deeply integrate with Mo
 
 - [x] **UI/UX Overhaul**:
     - [x] Migrated from an editor window to a modern, intuitive component-based workflow (`VRClothFitter` component and custom editor).
-- [ ] **Deprecate Custom Scaling System**:
-    - [ ] **Remove `ScalingPass.cs` and `VRClothFitterScalingData.cs`**. Build-time scaling is now fully delegated to `MA Merge Armature`.
-- [ ] **Redefine "Calculate Scale" Feature**:
-    - [ ] The "Calculate Scale" button no longer saves data to a custom component. Its new role is to:
+- [x] **Deprecate Custom Scaling System**:
+    - [x] **Remove `ScalingPass.cs` and `VRClothFitterScalingData.cs`**. Build-time scaling is now fully delegated to `MA Merge Armature`.
+- [x] **Redefine "Calculate Scale" Feature**:
+    - [x] The "Calculate Scale" button no longer saves data to a custom component. Its new role is to:
         1.  Calculate the **proportional differences** (bone length and thickness) between the avatar and the cloth's original armature.
         2.  Apply these calculated scales **directly to the cloth prefab's bone transforms** as a one-time setup step.
-- [ ] **Automate `MA Merge Armature` Setup**:
-    - [ ] The "Calculate Scale" button now automatically adds the `MA Merge Armature` component to the cloth.
-    - [ ] It ensures the `Match Bone Scale` option is enabled, allowing MA to handle all future scaling adjustments (e.g., from avatar height sliders) non-destructively at build time.
-- [ ] **Deprecate `Fit Bones` Feature**:
-    - [ ] Manual bone parenting is now fully delegated to `MA Merge Armature`, making the `Fit Bones` button obsolete.
+- [x] **Automate `MA Merge Armature` Setup**:
+    - [x] The "Calculate Scale" button now automatically adds the `MA Merge Armature` component to the cloth.
+    - [x] It ensures the `Match Bone Scale` option is enabled, allowing MA to handle all future scaling adjustments (e.g., from avatar height sliders) non-destructively at build time.
+- [x] **Deprecate `Fit Bones` Feature**:
+    - [x] Manual bone parenting is now fully delegated to `MA Merge Armature`, making the `Fit Bones` button obsolete.
 
 ### Phase 3: Advanced Fitting Features
 
