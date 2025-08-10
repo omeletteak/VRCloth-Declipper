@@ -157,7 +157,7 @@ public class VRClothFitterWindow : EditorWindow
                 GUILayout.Label(VRClothFitterLocalization.Tr("No materials found on cloth object."));
             }
         }
-        EndScrollView();
+        EditorGUILayout.EndScrollView();
 
         if (GUILayout.Button(VRClothFitterLocalization.Tr("Convert Materials"))) ConvertMaterials();
 
