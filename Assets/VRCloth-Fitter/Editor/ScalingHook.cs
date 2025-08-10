@@ -1,6 +1,7 @@
 using UnityEngine;
-using nadena.dev.modular_avatar.core;
-using UnityEditor;
+using nadena.dev.ndmf;
+using VRC.SDKBase;
+using System.Collections.Generic;
 
 namespace VRClothFitter
 {
@@ -10,47 +11,41 @@ namespace VRClothFitter
         // This component is just a marker to trigger the hook.
     }
 
-    [InitializeOnLoad]
-    internal class ScalingHookProcessor : MergeArmatureHook
+    internal class ScalingPass : Pass<ScalingPass>
     {
-        static ScalingHookProcessor()
-        {
-            // The static constructor is used to register the hook.
-        }
+        public override string DisplayName => "Apply VRClothFitter Scaling";
 
-        protected override void OnProcess(GameObject avatarGameObject, GameObject[] clothGameObjects)
+        protected override void Execute(BuildContext context)
         {
-            foreach (var cloth in clothGameObjects)
+            foreach (var scalingHook in context.AvatarRootObject.GetComponentsInChildren<ScalingHook>(true))
             {
-                if (cloth.GetComponent<ScalingHook>() == null) continue;
-
-                var scalingData = cloth.GetComponent<VRClothFitterScalingData>();
+                var clothObject = scalingHook.gameObject;
+                var scalingData = clothObject.GetComponent<VRClothFitterScalingData>();
                 if (scalingData == null || scalingData.boneScales.Count == 0) continue;
+
+                var renderer = clothObject.GetComponent<SkinnedMeshRenderer>();
+                if (renderer == null) continue;
+
+                var boneMap = new Dictionary<string, Transform>();
+                if (renderer.bones != null)
+                {
+                    foreach (var bone in renderer.bones)
+                    {
+                        if (bone != null && !boneMap.ContainsKey(bone.name))
+                        {
+                            boneMap[bone.name] = bone;
+                        }
+                    }
+                }
 
                 foreach (var boneScaleInfo in scalingData.boneScales)
                 {
-                    var bone = FindBone(cloth, boneScaleInfo.boneName);
-                    if (bone != null)
+                    if (boneMap.TryGetValue(boneScaleInfo.boneName, out var bone))
                     {
                         bone.localScale = Vector3.Scale(bone.localScale, boneScaleInfo.scale);
                     }
                 }
             }
-        }
-
-        private Transform FindBone(GameObject clothObject, string boneName)
-        {
-            var renderer = clothObject.GetComponent<SkinnedMeshRenderer>();
-            if (renderer == null) return null;
-
-            foreach (var bone in renderer.bones)
-            {
-                if (bone.name == boneName)
-                {
-                    return bone;
-                }
-            }
-            return null;
         }
     }
 }

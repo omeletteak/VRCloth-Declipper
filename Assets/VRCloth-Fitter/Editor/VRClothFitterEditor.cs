@@ -333,7 +333,7 @@ namespace VRClothFitter
             scalingData.boneScales = scaleInfos;
 
             if (clothObject.GetComponent<ScalingHook>() == null) Undo.AddComponent<ScalingHook>(clothObject);
-            if (clothObject.GetComponent<MergeArmature>() == null) Undo.AddComponent<MergeArmature>(clothObject);
+            if (clothObject.GetComponent<ModularAvatarMergeArmature>() == null) Undo.AddComponent<ModularAvatarMergeArmature>(clothObject);
 
             EditorUtility.DisplayDialog("Success", $"Calculated and saved {scaleInfos.Count} bone scales.", "OK");
         }
@@ -518,7 +518,7 @@ namespace VRClothFitter
             if (renderer == null) return;
 
             if (!EditorUtility.DisplayDialog("Confirm Material Conversion",
-                $"This will create new materials and replace them on '{clothObject.name}'. The original material assets will not be modified.\n\nContinue?",
+                "This will create new materials and replace them on '" + clothObject.name + "'. The original material assets will not be modified.\n\nContinue?",
                 "Convert", "Cancel")) return;
 
             Undo.RecordObject(renderer, "Convert Materials");
@@ -539,7 +539,7 @@ namespace VRClothFitter
                 
                 string path = AssetDatabase.GetAssetPath(oldMat);
                 string dir = string.IsNullOrEmpty(path) ? "Assets" : Path.GetDirectoryName(path);
-                string newPath = AssetDatabase.GenerateUniqueAssetPath($"{dir}/{newMat.name}.mat");
+                string newPath = AssetDatabase.GenerateUniqueAssetPath($"{dir}/{{newMat.name}}.mat");
                 AssetDatabase.CreateAsset(newMat, newPath);
                 newMaterials[i] = newMat;
             }
