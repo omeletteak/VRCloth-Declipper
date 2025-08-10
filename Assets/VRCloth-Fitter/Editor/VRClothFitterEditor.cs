@@ -8,11 +8,6 @@ using nadena.dev.modular_avatar.core;
 
 namespace VRClothFitter
 {
-    /// <summary>
-    /// Custom editor for the VRClothFitter component.
-    /// This script provides an intuitive, Inspector-based UI for all fitting operations,
-    /// acting as an intelligent setup utility for Modular Avatar components.
-    /// </summary>
     [CustomEditor(typeof(VRClothFitter))]
     public class VRClothFitterEditor : Editor
     {
@@ -23,31 +18,32 @@ namespace VRClothFitter
         private Vector2 scrollPositionMaterials;
         private Vector2 scrollPositionHardMaterials;
 
-        // Blendshape mapping variables
         private List<string> avatarBlendshapeNames = new List<string>();
         private string[] avatarBlendshapeNamesArray;
         private List<string> clothBlendshapeNames = new List<string>();
         private int[] mappedBlendshapeIndices;
 
-        // Material utility variables
         private Shader targetShader;
         private List<Material> clothMaterials = new List<Material>();
         
-        // Ghost Avatar variables
         private List<Material> hardPartCandidateMaterials = new List<Material>();
         private Dictionary<Material, bool> selectedHardMaterials = new Dictionary<Material, bool>();
         
         private GUIStyle boldLabelStyle;
-        private bool hasRefreshed = false;
+        private bool isPreviewing = false;
+        private Dictionary<Transform, Vector3> originalBoneScales;
 
         private void OnEnable()
         {
             fitter = (VRClothFitter)target;
             clothObject = fitter.gameObject;
             boldLabelStyle = new GUIStyle(EditorStyles.label) { fontStyle = FontStyle.Bold };
-            
             UpdateAllData();
-            hasRefreshed = true;
+        }
+
+        private void OnDisable()
+        {
+            StopPreview();
         }
 
         public override void OnInspectorGUI()
@@ -58,11 +54,10 @@ namespace VRClothFitter
             EditorGUILayout.PropertyField(serializedObject.FindProperty("targetAvatarObject"));
             EditorGUILayout.PropertyField(serializedObject.FindProperty("sourceAvatarObject"));
             
-            if (EditorGUI.EndChangeCheck() || (fitter.targetAvatarObject != null && !hasRefreshed))
+            if (EditorGUI.EndChangeCheck())
             {
                 serializedObject.ApplyModifiedProperties();
                 UpdateAllData();
-                hasRefreshed = true;
             }
 
             if (fitter.targetAvatarObject == null)
@@ -73,23 +68,12 @@ namespace VRClothFitter
             }
 
             EditorGUILayout.Space();
-
-            // --- Proportional Scaling Section ---
             DrawProportionalScalingUI();
-
             EditorGUILayout.Space();
-            
-            // --- Ghost Avatar Estimation Section ---
             DrawGhostAvatarUI();
-
             EditorGUILayout.Space();
-
-            // --- Blendshape Sync UI ---
             DrawBlendshapeSyncUI();
-
             EditorGUILayout.Space();
-            
-            // --- Material & Shader Utilities ---
             DrawMaterialUtilitiesUI();
             
             serializedObject.ApplyModifiedProperties();
@@ -100,27 +84,35 @@ namespace VRClothFitter
             GUILayout.Label("Proportional Scaling", boldLabelStyle);
             
             string helpText = fitter.sourceAvatarObject == null 
-                ? "This will calculate the proportional differences by comparing your Target Avatar to the cloth's bones (Fallback Mode)."
-                : "Source Avatar detected. This will calculate the true proportional differences between the Source and Target avatars for maximum accuracy (High-Precision Mode).";
+                ? "Mode: Fallback. Compares Target Avatar to the cloth's bones."
+                : "Mode: High-Precision. Compares Source and Target avatars directly.";
             EditorGUILayout.HelpBox(helpText, MessageType.Info);
 
-            if (GUILayout.Button("Calculate & Apply Proportional Scale"))
+            if (GUILayout.Button("Calculate & Save Scale Data"))
             {
-                CalculateAndApplyProportionalScale(null); // Pass null for normal operation
+                CalculateAndSaveScaleData(null);
             }
+
+            GUI.enabled = clothObject.GetComponent<VRClothFitterScalingData>() != null;
+            GUI.color = isPreviewing ? Color.yellow : Color.white;
+            if (GUILayout.Button(isPreviewing ? "Stop Preview" : "Start Preview"))
+            {
+                TogglePreview();
+            }
+            GUI.color = Color.white;
+            GUI.enabled = true;
         }
         
         private void DrawGhostAvatarUI()
         {
             GUILayout.Label("Ghost Avatar Estimation", boldLabelStyle);
-            EditorGUILayout.HelpBox("This experimental feature estimates the original avatar's body shape from the cloth mesh. Use this if you don't have the source avatar.", MessageType.Info);
+            EditorGUILayout.HelpBox("Experimental: Estimates the source avatar's body shape from the cloth mesh. Use if you don't have the source avatar.", MessageType.Info);
 
             if (GUILayout.Button("1. Detect Hard Part Candidates"))
             {
                 DetectHardPartCandidates();
             }
 
-            // UI for hard material selection
             if (hardPartCandidateMaterials.Count > 0)
             {
                 EditorGUILayout.LabelField("Select Hard Surface Materials:", EditorStyles.boldLabel);
@@ -137,7 +129,7 @@ namespace VRClothFitter
                 }
                 EditorGUILayout.EndScrollView();
                 
-                if (GUILayout.Button("2. Generate Ghost Avatar & Use for Scaling"))
+                if (GUILayout.Button("2. Generate Ghost & Use for Scaling"))
                 {
                     GenerateGhostAndScale();
                 }
@@ -146,7 +138,7 @@ namespace VRClothFitter
 
         private void DrawBlendshapeSyncUI()
         {
-            GUILayout.Label(VRClothFitterLocalization.Tr("Blendshape Sync"), boldLabelStyle);
+            GUILayout.Label("Blendshape Sync", boldLabelStyle);
             scrollPositionBlendshapes = EditorGUILayout.BeginScrollView(scrollPositionBlendshapes, EditorStyles.helpBox, GUILayout.Height(150));
             {
                 if (clothBlendshapeNames.Count > 0 && avatarBlendshapeNames.Count > 0)
@@ -162,17 +154,17 @@ namespace VRClothFitter
                 }
                 else
                 {
-                    GUILayout.Label(VRClothFitterLocalization.Tr("No blendshapes found."));
+                    GUILayout.Label("No blendshapes found.");
                 }
             }
             EditorGUILayout.EndScrollView();
-            if (GUILayout.Button(VRClothFitterLocalization.Tr("Apply Blendshape Sync"))) ApplyBlendshapeSync();
+            if (GUILayout.Button("Apply Blendshape Sync")) ApplyBlendshapeSync();
         }
 
         private void DrawMaterialUtilitiesUI()
         {
-            GUILayout.Label(VRClothFitterLocalization.Tr("Material & Shader Utilities"), boldLabelStyle);
-            targetShader = (Shader)EditorGUILayout.ObjectField(VRClothFitterLocalization.Tr("Target Shader"), targetShader, typeof(Shader), false);
+            GUILayout.Label("Material & Shader Utilities", boldLabelStyle);
+            targetShader = (Shader)EditorGUILayout.ObjectField("Target Shader", targetShader, typeof(Shader), false);
 
             scrollPositionMaterials = EditorGUILayout.BeginScrollView(scrollPositionMaterials, EditorStyles.helpBox, GUILayout.Height(100));
             {
@@ -185,12 +177,12 @@ namespace VRClothFitter
                 }
                 else
                 {
-                    GUILayout.Label(VRClothFitterLocalization.Tr("No materials found on cloth object."));
+                    GUILayout.Label("No materials found on cloth object.");
                 }
             }
             EditorGUILayout.EndScrollView();
 
-            if (GUILayout.Button(VRClothFitterLocalization.Tr("Convert Materials"))) ConvertMaterials();
+            if (GUILayout.Button("Convert Materials")) ConvertMaterials();
         }
         
         private void UpdateAllData()
@@ -201,7 +193,6 @@ namespace VRClothFitter
                 clothBlendshapeNames.Clear();
                 clothMaterials.Clear();
                 mappedBlendshapeIndices = new int[0];
-                hasRefreshed = false;
                 return;
             }
 
@@ -224,7 +215,7 @@ namespace VRClothFitter
                     avatarBlendshapeNames.Add(avatarRenderer.sharedMesh.GetBlendShapeName(i));
                 }
             }
-            avatarBlendshapeNames.Insert(0, VRClothFitterLocalization.Tr("None"));
+            avatarBlendshapeNames.Insert(0, "None");
             avatarBlendshapeNamesArray = avatarBlendshapeNames.ToArray();
 
             if (clothRenderer?.sharedMesh != null)
@@ -255,40 +246,30 @@ namespace VRClothFitter
         private void ApplyBlendshapeSync()
         {
             if (clothObject == null || fitter.targetAvatarObject == null) return;
-
             var avatarRenderer = fitter.targetAvatarObject.GetComponentInChildren<SkinnedMeshRenderer>();
             if (avatarRenderer == null) return;
 
             var syncComponent = clothObject.GetComponent<ModularAvatarBlendshapeSync>();
-            if (syncComponent == null)
-            {
-                syncComponent = Undo.AddComponent<ModularAvatarBlendshapeSync>(clothObject);
-            }
+            if (syncComponent == null) syncComponent = Undo.AddComponent<ModularAvatarBlendshapeSync>(clothObject);
             Undo.RecordObject(syncComponent, "Apply Blendshape Sync");
 
             syncComponent.Bindings.Clear();
-
             for (int i = 0; i < clothBlendshapeNames.Count; i++)
             {
                 int selectedIndex = mappedBlendshapeIndices[i];
                 if (selectedIndex > 0)
                 {
-                    string clothBsName = clothBlendshapeNames[i];
-                    string avatarBsName = avatarBlendshapeNamesArray[selectedIndex];
-                    
                     var binding = new BlendshapeBinding();
                     var avatarRef = new AvatarObjectReference();
                     var objField = typeof(AvatarObjectReference).GetField("Object", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
                     if (objField != null) objField.SetValue(avatarRef, avatarRenderer);
                     
                     binding.ReferenceMesh = avatarRef;
-                    binding.Blendshape = avatarBsName;
-                    binding.LocalBlendshape = clothBsName;
-                    
+                    binding.Blendshape = avatarBlendshapeNamesArray[selectedIndex];
+                    binding.LocalBlendshape = clothBlendshapeNames[i];
                     syncComponent.Bindings.Add(binding);
                 }
             }
-            
             EditorUtility.DisplayDialog("Success", $"Applied {syncComponent.Bindings.Count} blendshape sync rules.", "OK");
         }
 
@@ -306,31 +287,26 @@ namespace VRClothFitter
             {
                 sourceAvatarRenderer = fitter.sourceAvatarObject.GetComponentInChildren<SkinnedMeshRenderer>();
             }
-
             return targetAvatarRenderer != null && clothRenderer != null;
         }
     
-        private void CalculateAndApplyProportionalScale(SkinnedMeshRenderer ghostRenderer)
+        private void CalculateAndSaveScaleData(SkinnedMeshRenderer ghostRenderer)
         {
             if (!GetRenderers(out var targetAvatarRenderer, out var clothRenderer, out var sourceAvatarRenderer) && ghostRenderer == null)
             {
-                EditorUtility.DisplayDialog("Error", "Avatar and Cloth must be set and contain SkinnedMeshRenderers.", "OK");
+                EditorUtility.DisplayDialog("Error", "Renderers not found.", "OK");
                 return;
             }
-
-            var clothBones = clothRenderer.bones;
-            Undo.RecordObjects(clothBones, "Apply Proportional Scale to Bones");
 
             var sourceComparisonRenderer = ghostRenderer != null ? ghostRenderer : (sourceAvatarRenderer != null ? sourceAvatarRenderer : clothRenderer);
 
             var targetAvatarBonesDict = targetAvatarRenderer.bones.ToDictionary(b => b.name, b => b);
             var sourceBonesDict = sourceComparisonRenderer.bones.ToDictionary(b => b.name, b => b);
-
             var targetAvatarBoneRadii = CalculateAllBoneRadii(targetAvatarRenderer);
             var sourceBoneRadii = CalculateAllBoneRadii(sourceComparisonRenderer);
 
-            int appliedCount = 0;
-            foreach (var clothBone in clothBones)
+            var scaleInfos = new List<BoneScaleInfo>();
+            foreach (var clothBone in clothRenderer.bones)
             {
                 if (!sourceBonesDict.TryGetValue(clothBone.name, out var sourceBone)) continue;
                 if (!targetAvatarBonesDict.TryGetValue(clothBone.name, out var targetBone)) continue;
@@ -348,30 +324,61 @@ namespace VRClothFitter
                 {
                     if (sourceRadius > 0.0001f) scaleXZ = targetRadius / sourceRadius;
                 }
-
-                clothBone.localScale = new Vector3(scaleXZ, scaleY, scaleXZ);
-                appliedCount++;
+                scaleInfos.Add(new BoneScaleInfo { boneName = clothBone.name, scale = new Vector3(scaleXZ, scaleY, scaleXZ) });
             }
 
-            var mergeArmature = clothObject.GetComponent<MergeArmature>();
-            if (mergeArmature == null)
+            var scalingData = clothObject.GetComponent<VRClothFitterScalingData>();
+            if (scalingData == null) scalingData = Undo.AddComponent<VRClothFitterScalingData>(clothObject);
+            Undo.RecordObject(scalingData, "Save Scale Data");
+            scalingData.boneScales = scaleInfos;
+
+            if (clothObject.GetComponent<ScalingHook>() == null) Undo.AddComponent<ScalingHook>(clothObject);
+            if (clothObject.GetComponent<MergeArmature>() == null) Undo.AddComponent<MergeArmature>(clothObject);
+
+            EditorUtility.DisplayDialog("Success", $"Calculated and saved {scaleInfos.Count} bone scales.", "OK");
+        }
+
+        private void TogglePreview()
+        {
+            if (isPreviewing) StopPreview();
+            else StartPreview();
+        }
+
+        private void StartPreview()
+        {
+            var scalingData = clothObject.GetComponent<VRClothFitterScalingData>();
+            var clothRenderer = clothObject.GetComponent<SkinnedMeshRenderer>();
+            if (scalingData == null || clothRenderer == null) return;
+
+            originalBoneScales = new Dictionary<Transform, Vector3>();
+            foreach (var bone in clothRenderer.bones)
             {
-                mergeArmature = Undo.AddComponent<MergeArmature>(clothObject);
+                if (bone != null) originalBoneScales[bone] = bone.localScale;
             }
-            Undo.RecordObject(mergeArmature, "Configure MA Merge Armature");
-            mergeArmature.matchBoneScale = true;
 
-            EditorUtility.DisplayDialog("Success", $"Applied proportional scale to {appliedCount} bones and configured MA Merge Armature.", "OK");
+            foreach (var info in scalingData.boneScales)
+            {
+                var bone = clothRenderer.bones.FirstOrDefault(b => b.name == info.boneName);
+                if (bone != null) bone.localScale = Vector3.Scale(bone.localScale, info.scale);
+            }
+            isPreviewing = true;
+        }
+
+        private void StopPreview()
+        {
+            if (!isPreviewing || originalBoneScales == null) return;
+            foreach (var pair in originalBoneScales)
+            {
+                if (pair.Key != null) pair.Key.localScale = pair.Value;
+            }
+            originalBoneScales = null;
+            isPreviewing = false;
         }
 
         private void DetectHardPartCandidates()
         {
             var clothRenderer = clothObject.GetComponentInChildren<SkinnedMeshRenderer>();
-            if (clothRenderer == null || clothRenderer.sharedMesh == null)
-            {
-                EditorUtility.DisplayDialog("Error", "Cloth object must have a SkinnedMeshRenderer with a mesh.", "OK");
-                return;
-            }
+            if (clothRenderer == null || clothRenderer.sharedMesh == null) return;
 
             var mesh = clothRenderer.sharedMesh;
             var boneWeights = mesh.boneWeights;
@@ -381,10 +388,7 @@ namespace VRClothFitter
             var vertexToSubmeshMap = new Dictionary<int, int>();
             for (int i = 0; i < mesh.subMeshCount; i++)
             {
-                foreach (var vertIndex in mesh.GetTriangles(i))
-                {
-                    vertexToSubmeshMap[vertIndex] = i;
-                }
+                foreach (var vertIndex in mesh.GetTriangles(i)) vertexToSubmeshMap[vertIndex] = i;
             }
 
             for (int i = 0; i < boneWeights.Length; i++)
@@ -401,12 +405,9 @@ namespace VRClothFitter
 
             hardPartCandidateMaterials = candidateMaterialSet.ToList();
             selectedHardMaterials.Clear();
-            foreach (var mat in hardPartCandidateMaterials)
-            {
-                selectedHardMaterials[mat] = true; // Select all by default
-            }
+            foreach (var mat in hardPartCandidateMaterials) selectedHardMaterials[mat] = true;
             
-            EditorUtility.DisplayDialog("Detection Complete", $"{hardPartCandidateMaterials.Count} candidate materials for hard parts were found based on bone weights.", "OK");
+            EditorUtility.DisplayDialog("Detection Complete", $"{hardPartCandidateMaterials.Count} candidate materials found.", "OK");
         }
 
         private void GenerateGhostAndScale()
@@ -435,10 +436,7 @@ namespace VRClothFitter
             var vertexToSubmeshMap = new Dictionary<int, int>();
             for (int i = 0; i < originalMesh.subMeshCount; i++)
             {
-                foreach (var vertIndex in originalMesh.GetTriangles(i))
-                {
-                    vertexToSubmeshMap[vertIndex] = i;
-                }
+                foreach (var vertIndex in originalMesh.GetTriangles(i)) vertexToSubmeshMap[vertIndex] = i;
             }
 
             for (int i = 0; i < vertices.Length; i++)
@@ -464,7 +462,7 @@ namespace VRClothFitter
             ghostRenderer.bones = clothRenderer.bones;
             ghostRenderer.rootBone = clothRenderer.rootBone;
 
-            CalculateAndApplyProportionalScale(ghostRenderer);
+            CalculateAndSaveScaleData(ghostRenderer);
 
             DestroyImmediate(ghostObject);
         }
@@ -510,26 +508,20 @@ namespace VRClothFitter
                 }
                 boneRadii[bone.name] = totalDistance / vertexList.Count;
             }
-
             return boneRadii;
         }
     
         private void ConvertMaterials()
         {
             if (clothObject == null || targetShader == null) return;
-
             var renderer = clothObject.GetComponentInChildren<SkinnedMeshRenderer>();
             if (renderer == null) return;
 
             if (!EditorUtility.DisplayDialog("Confirm Material Conversion",
-                "This will create new materials and replace them on '" + clothObject.name + "'. The original material assets will not be modified.\n\nContinue?",
-                "Convert", "Cancel"))
-            {
-                return;
-            }
+                $"This will create new materials and replace them on '{clothObject.name}'. The original material assets will not be modified.\n\nContinue?",
+                "Convert", "Cancel")) return;
 
             Undo.RecordObject(renderer, "Convert Materials");
-
             var originalMaterials = renderer.sharedMaterials;
             var newMaterials = new Material[originalMaterials.Length];
 
@@ -547,15 +539,12 @@ namespace VRClothFitter
                 
                 string path = AssetDatabase.GetAssetPath(oldMat);
                 string dir = string.IsNullOrEmpty(path) ? "Assets" : Path.GetDirectoryName(path);
-                string newPath = AssetDatabase.GenerateUniqueAssetPath($"{dir}/{{newMat.name}}.mat");
+                string newPath = AssetDatabase.GenerateUniqueAssetPath($"{dir}/{newMat.name}.mat");
                 AssetDatabase.CreateAsset(newMat, newPath);
-
                 newMaterials[i] = newMat;
             }
-
             renderer.sharedMaterials = newMaterials;
             UpdateMaterialData();
-            
             EditorUtility.DisplayDialog("Success", $"Converted {newMaterials.Length} materials.", "OK");
         }
     }
