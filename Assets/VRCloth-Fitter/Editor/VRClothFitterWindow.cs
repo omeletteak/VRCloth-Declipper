@@ -302,7 +302,15 @@ public class VRClothFitterWindow : EditorWindow
                 string avatarBsName = avatarBlendshapeNamesArray[selectedIndex];
                 
                 var binding = new BlendshapeBinding();
-                binding.ReferenceMesh = AvatarObjectReference.FromObject(avatarRenderer.gameObject, syncComponent);
+                // This API is tricky. We create a new reference and set the Object property.
+                var avatarRef = new AvatarObjectReference();
+                var objField = typeof(AvatarObjectReference).GetField("Object", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+                if (objField != null)
+                {
+                    objField.SetValue(avatarRef, avatarRenderer);
+                }
+                
+                binding.ReferenceMesh = avatarRef;
                 binding.Blendshape = avatarBsName;
                 binding.LocalBlendshape = clothBsName;
                 
@@ -432,7 +440,8 @@ public class VRClothFitterWindow : EditorWindow
                 }
             }
 
-            scaleInfos.Add(new BoneScaleInfo
+            scaleInfos.Add(
+            new BoneScaleInfo
             {
                 boneName = clothBoneName,
                 scale = new Vector3(scaleXZ, scaleY, scaleXZ)
@@ -518,7 +527,7 @@ public class VRClothFitterWindow : EditorWindow
         if (renderer == null || renderer.sharedMesh == null) return boneRadii;
 
         var mesh = renderer.sharedMesh;
-        var boneWeights = mesh.GetAllBoneWeights();
+        var boneWeights = mesh.boneWeights;
         var vertices = mesh.vertices;
         var bones = renderer.bones;
 
