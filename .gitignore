@@ -28,8 +28,6 @@
 /Assets/XR.meta
 
 # Logs and temporary files
-/[Ee]ditor.log
-/[Ee]ditor.log.meta
 *.zip
 /vpm-listing-temp/
 
