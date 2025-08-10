@@ -26,11 +26,11 @@ public class VRClothFitterDeformationDataEditor : Editor
             serializedObject.FindProperty("anchorPairs"), 
             true, true, true, true);
 
-        anchorList.drawHeaderCallback = (Rect rect) => {
-            EditorGUI.LabelField(rect, "Anchor Points");
+        anchorList.drawHeaderCallback = (Rect rect) => { 
+            EditorGUI.LabelField(rect, VRClothFitterLocalization.Tr("Anchor Points")); 
         };
 
-        anchorList.drawElementCallback = (Rect rect, int index, bool isActive, bool isFocused) => {
+        anchorList.drawElementCallback = (Rect rect, int index, bool isActive, bool isFocused) => { 
             var element = anchorList.serializedProperty.GetArrayElementAtIndex(index);
             rect.y += 2;
             EditorGUI.PropertyField(
@@ -48,7 +48,7 @@ public class VRClothFitterDeformationDataEditor : Editor
     {
         serializedObject.Update();
         
-        EditorGUILayout.PropertyField(serializedObject.FindProperty("avatarRoot"));
+        EditorGUILayout.PropertyField(serializedObject.FindProperty("avatarRoot"), new GUIContent(VRClothFitterLocalization.Tr("Avatar")));
         
         EditorGUILayout.Space();
         
@@ -58,7 +58,7 @@ public class VRClothFitterDeformationDataEditor : Editor
 
         EditorGUILayout.Space();
 
-        string buttonText = isPlacingAnchor ? "Cancel Placing Anchor" : "Add New Anchor Pair";
+        string buttonText = isPlacingAnchor ? VRClothFitterLocalization.Tr("Cancel Placing Anchor") : VRClothFitterLocalization.Tr("Add New Anchor Pair");
         GUI.color = isPlacingAnchor ? Color.yellow : Color.white;
         if (GUILayout.Button(buttonText))
         {
@@ -75,8 +75,8 @@ public class VRClothFitterDeformationDataEditor : Editor
 
         EditorGUILayout.Space();
         EditorGUILayout.BeginHorizontal();
-        if (GUILayout.Button("Export Preset")) ExportPreset();
-        if (GUILayout.Button("Import Preset")) ImportPreset();
+        if (GUILayout.Button(VRClothFitterLocalization.Tr("ExportPreset"))) ExportPreset();
+        if (GUILayout.Button(VRClothFitterLocalization.Tr("ImportPreset"))) ImportPreset();
         EditorGUILayout.EndHorizontal();
     }
 
@@ -95,7 +95,7 @@ public class VRClothFitterDeformationDataEditor : Editor
 
         string json = JsonUtility.ToJson(preset, true);
         File.WriteAllText(path, json);
-        EditorUtility.DisplayDialog("Export Successful", $"Preset saved to:\n{{path}}", "OK");
+        EditorUtility.DisplayDialog("Export Successful", $"Preset saved to:\n{path}", "OK");
     }
 
     private void ImportPreset()
@@ -181,14 +181,14 @@ public class VRClothFitterDeformationDataEditor : Editor
         {
             if (!hasPlacedAvatarAnchor)
             {
-                GUILayout.Label("1. Click on the AVATAR mesh to place the first anchor point.");
+                GUILayout.Label(VRClothFitterLocalization.Tr("1. Click on the AVATAR mesh to place the first anchor point."));
             }
             else
             {
-                GUILayout.Label("2. Click on the CLOTH mesh to place the second anchor point.");
+                GUILayout.Label(VRClothFitterLocalization.Tr("2. Click on the CLOTH mesh to place the second anchor point."));
             }
-            GUILayout.Label("Press ESC to cancel.");
-        }, "Place New Anchor");
+            GUILayout.Label(VRClothFitterLocalization.Tr("Press ESC to cancel."));
+        }, VRClothFitterLocalization.Tr("Place New Anchor"));
         Handles.EndGUI();
 
         if (hasPlacedAvatarAnchor)
@@ -226,7 +226,7 @@ public class VRClothFitterDeformationDataEditor : Editor
                     Undo.RecordObject(data, "Add Anchor Pair");
                     data.anchorPairs.Add(new DeformationAnchorPair
                     {
-                        name = $"Anchor {{data.anchorPairs.Count + 1}}",
+                        name = $"Anchor {data.anchorPairs.Count + 1}",
                         avatarAnchor = pendingAvatarAnchor,
                         clothAnchor = clothAnchorPos
                     });

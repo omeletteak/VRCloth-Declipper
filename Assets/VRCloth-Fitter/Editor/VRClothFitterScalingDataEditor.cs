@@ -12,12 +12,12 @@ public class VRClothFitterScalingDataEditor : Editor
 
         EditorGUILayout.Space();
 
-        if (GUILayout.Button("Export Preset"))
+        if (GUILayout.Button(VRClothFitterLocalization.Tr("Export Preset")))
         {
             ExportPreset();
         }
 
-        if (GUILayout.Button("Import Preset"))
+        if (GUILayout.Button(VRClothFitterLocalization.Tr("Import Preset")))
         {
             ImportPreset();
         }
