@@ -43,13 +43,6 @@ namespace VRClothFitter
                 Undo.AddComponent<VRClothFitter>(prefabRoot);
                 Debug.Log("Added VRClothFitter component.", prefabRoot);
             }
-
-            // ModularAvatarMergeArmatureコンポーネントを追加
-            if (prefabRoot.GetComponent<ModularAvatarMergeArmature>() == null)
-            {
-                Undo.AddComponent<ModularAvatarMergeArmature>(prefabRoot);
-                Debug.Log("Added ModularAvatarMergeArmature component.", prefabRoot);
-            }
             
             // 変更をプレハブに保存
             PrefabUtility.SaveAsPrefabAsset(prefabRoot, path);
