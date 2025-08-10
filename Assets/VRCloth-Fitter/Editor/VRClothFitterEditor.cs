@@ -48,6 +48,28 @@ namespace VRClothFitter
 
         public override void OnInspectorGUI()
         {
+            // Check if the component is on the root of the prefab.
+            bool isAtRoot = true;
+            if (PrefabUtility.IsPartOfPrefabInstance(fitter.gameObject))
+            {
+                if (PrefabUtility.GetNearestPrefabInstanceRoot(fitter.gameObject) != fitter.gameObject)
+                {
+                    isAtRoot = false;
+                }
+            }
+            else if (PrefabUtility.IsPartOfPrefabAsset(fitter.gameObject))
+            {
+                if (fitter.transform.parent != null)
+                {
+                    isAtRoot = false;
+                }
+            }
+
+            if (!isAtRoot)
+            {
+                EditorGUILayout.HelpBox("VRClothFitter should be placed on the root of the cloth prefab.", MessageType.Warning);
+            }
+            
             serializedObject.Update();
 
             // 自動で親のアバターを検出する
