@@ -17,7 +17,6 @@ namespace VRClothFitter
     public class VRClothFitterEditor : Editor
     {
         private VRClothFitter fitter;
-        private GameObject avatarObject;
         private GameObject clothObject;
 
         private Vector2 scrollPositionBlendshapes;
@@ -51,17 +50,19 @@ namespace VRClothFitter
             serializedObject.Update();
 
             EditorGUI.BeginChangeCheck();
-            EditorGUILayout.PropertyField(serializedObject.FindProperty("avatarObject"));
-            if (EditorGUI.EndChangeCheck() || (fitter.avatarObject != null && !hasRefreshed))
+            EditorGUILayout.PropertyField(serializedObject.FindProperty("targetAvatarObject"));
+            EditorGUILayout.PropertyField(serializedObject.FindProperty("sourceAvatarObject"));
+            
+            if (EditorGUI.EndChangeCheck() || (fitter.targetAvatarObject != null && !hasRefreshed))
             {
                 serializedObject.ApplyModifiedProperties();
                 UpdateAllData();
                 hasRefreshed = true;
             }
 
-            if (fitter.avatarObject == null)
+            if (fitter.targetAvatarObject == null)
             {
-                EditorGUILayout.HelpBox("Please assign an Avatar GameObject.", MessageType.Info);
+                EditorGUILayout.HelpBox("Please assign a Target Avatar GameObject.", MessageType.Info);
                 serializedObject.ApplyModifiedProperties();
                 return;
             }
@@ -87,7 +88,12 @@ namespace VRClothFitter
         private void DrawProportionalScalingUI()
         {
             GUILayout.Label("Proportional Scaling", boldLabelStyle);
-            EditorGUILayout.HelpBox("This will calculate the proportional differences between your avatar and the cloth's original armature, apply it to the cloth's bones, and set up MA Merge Armature for you.", MessageType.Info);
+            
+            string helpText = fitter.sourceAvatarObject == null 
+                ? "This will calculate the proportional differences by comparing your Target Avatar to the cloth's bones (Fallback Mode)."
+                : "Source Avatar detected. This will calculate the true proportional differences between the Source and Target avatars for maximum accuracy (High-Precision Mode).";
+            EditorGUILayout.HelpBox(helpText, MessageType.Info);
+
             if (GUILayout.Button("Calculate & Apply Proportional Scale"))
             {
                 CalculateAndApplyProportionalScale();
@@ -145,7 +151,7 @@ namespace VRClothFitter
         
         private void UpdateAllData()
         {
-            if (fitter == null || fitter.avatarObject == null)
+            if (fitter == null || fitter.targetAvatarObject == null)
             {
                 avatarBlendshapeNames.Clear();
                 clothBlendshapeNames.Clear();
@@ -155,8 +161,7 @@ namespace VRClothFitter
                 return;
             }
 
-            avatarObject = fitter.avatarObject;
-            var avatarRenderer = avatarObject?.GetComponentInChildren<SkinnedMeshRenderer>();
+            var avatarRenderer = fitter.targetAvatarObject?.GetComponentInChildren<SkinnedMeshRenderer>();
             var clothRenderer = clothObject?.GetComponentInChildren<SkinnedMeshRenderer>();
 
             UpdateBlendshapeData(avatarRenderer, clothRenderer);
@@ -205,9 +210,9 @@ namespace VRClothFitter
 
         private void ApplyBlendshapeSync()
         {
-            if (clothObject == null || avatarObject == null) return;
+            if (clothObject == null || fitter.targetAvatarObject == null) return;
 
-            var avatarRenderer = avatarObject.GetComponentInChildren<SkinnedMeshRenderer>();
+            var avatarRenderer = fitter.targetAvatarObject.GetComponentInChildren<SkinnedMeshRenderer>();
             if (avatarRenderer == null) return;
 
             var syncComponent = clothObject.GetComponent<ModularAvatarBlendshapeSync>();
@@ -243,22 +248,27 @@ namespace VRClothFitter
             EditorUtility.DisplayDialog("Success", $"Applied {syncComponent.Bindings.Count} blendshape sync rules.", "OK");
         }
 
-        private bool GetRenderers(out SkinnedMeshRenderer avatarRenderer, out SkinnedMeshRenderer clothRenderer)
+        private bool GetRenderers(out SkinnedMeshRenderer targetAvatarRenderer, out SkinnedMeshRenderer clothRenderer, out SkinnedMeshRenderer sourceAvatarRenderer)
         {
-            avatarRenderer = null;
+            targetAvatarRenderer = null;
             clothRenderer = null;
+            sourceAvatarRenderer = null;
 
-            if (avatarObject == null || clothObject == null) return false;
+            if (fitter.targetAvatarObject == null || clothObject == null) return false;
 
-            avatarRenderer = avatarObject.GetComponentInChildren<SkinnedMeshRenderer>();
+            targetAvatarRenderer = fitter.targetAvatarObject.GetComponentInChildren<SkinnedMeshRenderer>();
             clothRenderer = clothObject.GetComponentInChildren<SkinnedMeshRenderer>();
+            if (fitter.sourceAvatarObject != null)
+            {
+                sourceAvatarRenderer = fitter.sourceAvatarObject.GetComponentInChildren<SkinnedMeshRenderer>();
+            }
 
-            return avatarRenderer != null && clothRenderer != null;
+            return targetAvatarRenderer != null && clothRenderer != null;
         }
     
         private void CalculateAndApplyProportionalScale()
         {
-            if (!GetRenderers(out var avatarRenderer, out var clothRenderer))
+            if (!GetRenderers(out var targetAvatarRenderer, out var clothRenderer, out var sourceAvatarRenderer))
             {
                 EditorUtility.DisplayDialog("Error", "Avatar and Cloth must be set and contain SkinnedMeshRenderers.", "OK");
                 return;
@@ -267,29 +277,36 @@ namespace VRClothFitter
             var clothBones = clothRenderer.bones;
             Undo.RecordObjects(clothBones, "Apply Proportional Scale to Bones");
 
-            var avatarBonesDict = avatarRenderer.bones.ToDictionary(b => b.name, b => b);
-            var clothBonesDict = clothBones.ToDictionary(b => b.name, b => b);
+            // Determine which renderer to use for the source comparison
+            var sourceComparisonRenderer = sourceAvatarRenderer != null ? sourceAvatarRenderer : clothRenderer;
 
-            var avatarBoneRadii = CalculateAllBoneRadii(avatarRenderer);
-            var clothBoneRadii = CalculateAllBoneRadii(clothRenderer);
+            var targetAvatarBonesDict = targetAvatarRenderer.bones.ToDictionary(b => b.name, b => b);
+            var sourceBonesDict = sourceComparisonRenderer.bones.ToDictionary(b => b.name, b => b);
+
+            var targetAvatarBoneRadii = CalculateAllBoneRadii(targetAvatarRenderer);
+            var sourceBoneRadii = CalculateAllBoneRadii(sourceComparisonRenderer);
 
             int appliedCount = 0;
             foreach (var clothBone in clothBones)
             {
-                if (!avatarBonesDict.TryGetValue(clothBone.name, out var avatarBone)) continue;
+                // Find corresponding bones in both source and target armatures
+                if (!sourceBonesDict.TryGetValue(clothBone.name, out var sourceBone)) continue;
+                if (!targetAvatarBonesDict.TryGetValue(clothBone.name, out var targetBone)) continue;
 
+                // Calculate length-based scale (Y-axis)
                 float scaleY = 1.0f;
-                if (clothBone.childCount > 0 && avatarBone.childCount > 0)
+                if (sourceBone.childCount > 0 && targetBone.childCount > 0)
                 {
-                    float clothBoneLength = Vector3.Distance(clothBone.position, clothBone.GetChild(0).position);
-                    float avatarBoneLength = Vector3.Distance(avatarBone.position, avatarBone.GetChild(0).position);
-                    if (clothBoneLength > 0.0001f) scaleY = avatarBoneLength / clothBoneLength;
+                    float sourceBoneLength = Vector3.Distance(sourceBone.position, sourceBone.GetChild(0).position);
+                    float targetBoneLength = Vector3.Distance(targetBone.position, targetBone.GetChild(0).position);
+                    if (sourceBoneLength > 0.0001f) scaleY = targetBoneLength / sourceBoneLength;
                 }
 
+                // Calculate radius-based scale (XZ-axes)
                 float scaleXZ = 1.0f;
-                if (avatarBoneRadii.TryGetValue(avatarBone.name, out float avatarRadius) && clothBoneRadii.TryGetValue(clothBone.name, out float clothRadius))
+                if (targetAvatarBoneRadii.TryGetValue(targetBone.name, out float targetRadius) && sourceBoneRadii.TryGetValue(sourceBone.name, out float sourceRadius))
                 {
-                    if (clothRadius > 0.0001f) scaleXZ = avatarRadius / clothRadius;
+                    if (sourceRadius > 0.0001f) scaleXZ = targetRadius / sourceRadius;
                 }
 
                 clothBone.localScale = new Vector3(scaleXZ, scaleY, scaleXZ);

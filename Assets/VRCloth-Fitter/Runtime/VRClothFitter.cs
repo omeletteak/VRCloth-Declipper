@@ -9,6 +9,9 @@ namespace VRClothFitter
     [AddComponentMenu("VRCloth Fitter/VRCloth Fitter")]
     public class VRClothFitter : MonoBehaviour
     {
-        public GameObject avatarObject;
+        [Tooltip("The avatar you want to fit the cloth to.")]
+        public GameObject targetAvatarObject;
+        [Tooltip("(Optional) The original avatar the cloth was made for. Providing this enables High-Precision mode.")]
+        public GameObject sourceAvatarObject;
     }
 }
