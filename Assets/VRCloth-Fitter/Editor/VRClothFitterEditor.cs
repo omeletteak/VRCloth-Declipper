@@ -21,6 +21,7 @@ namespace VRClothFitter
 
         private Vector2 scrollPositionBlendshapes;
         private Vector2 scrollPositionMaterials;
+        private Vector2 scrollPositionHardMaterials;
 
         // Blendshape mapping variables
         private List<string> avatarBlendshapeNames = new List<string>();
@@ -31,6 +32,10 @@ namespace VRClothFitter
         // Material utility variables
         private Shader targetShader;
         private List<Material> clothMaterials = new List<Material>();
+        
+        // Ghost Avatar variables
+        private List<Material> hardPartCandidateMaterials = new List<Material>();
+        private Dictionary<Material, bool> selectedHardMaterials = new Dictionary<Material, bool>();
         
         private GUIStyle boldLabelStyle;
         private bool hasRefreshed = false;
@@ -73,6 +78,11 @@ namespace VRClothFitter
             DrawProportionalScalingUI();
 
             EditorGUILayout.Space();
+            
+            // --- Ghost Avatar Estimation Section ---
+            DrawGhostAvatarUI();
+
+            EditorGUILayout.Space();
 
             // --- Blendshape Sync UI ---
             DrawBlendshapeSyncUI();
@@ -97,6 +107,39 @@ namespace VRClothFitter
             if (GUILayout.Button("Calculate & Apply Proportional Scale"))
             {
                 CalculateAndApplyProportionalScale();
+            }
+        }
+        
+        private void DrawGhostAvatarUI()
+        {
+            GUILayout.Label("Ghost Avatar Estimation", boldLabelStyle);
+            EditorGUILayout.HelpBox("This experimental feature estimates the original avatar's body shape from the cloth mesh. Use this if you don't have the source avatar.", MessageType.Info);
+
+            if (GUILayout.Button("1. Detect Hard Part Candidates"))
+            {
+                // Logic to be implemented
+            }
+
+            // UI for hard material selection
+            if (hardPartCandidateMaterials.Count > 0)
+            {
+                EditorGUILayout.LabelField("Select Hard Surface Materials:", EditorStyles.boldLabel);
+                scrollPositionHardMaterials = EditorGUILayout.BeginScrollView(scrollPositionHardMaterials, EditorStyles.helpBox, GUILayout.Height(100));
+                {
+                    foreach (var mat in hardPartCandidateMaterials)
+                    {
+                        if (mat != null)
+                        {
+                            selectedHardMaterials[mat] = EditorGUILayout.ToggleLeft(mat.name, selectedHardMaterials.ContainsKey(mat) && selectedHardMaterials[mat]);
+                        }
+                    }
+                }
+                EditorGUILayout.EndScrollView();
+                
+                if (GUILayout.Button("2. Generate Ghost Avatar & Use for Scaling"))
+                {
+                    // Logic to be implemented
+                }
             }
         }
 
@@ -277,7 +320,6 @@ namespace VRClothFitter
             var clothBones = clothRenderer.bones;
             Undo.RecordObjects(clothBones, "Apply Proportional Scale to Bones");
 
-            // Determine which renderer to use for the source comparison
             var sourceComparisonRenderer = sourceAvatarRenderer != null ? sourceAvatarRenderer : clothRenderer;
 
             var targetAvatarBonesDict = targetAvatarRenderer.bones.ToDictionary(b => b.name, b => b);
@@ -289,11 +331,9 @@ namespace VRClothFitter
             int appliedCount = 0;
             foreach (var clothBone in clothBones)
             {
-                // Find corresponding bones in both source and target armatures
                 if (!sourceBonesDict.TryGetValue(clothBone.name, out var sourceBone)) continue;
                 if (!targetAvatarBonesDict.TryGetValue(clothBone.name, out var targetBone)) continue;
 
-                // Calculate length-based scale (Y-axis)
                 float scaleY = 1.0f;
                 if (sourceBone.childCount > 0 && targetBone.childCount > 0)
                 {
@@ -302,7 +342,6 @@ namespace VRClothFitter
                     if (sourceBoneLength > 0.0001f) scaleY = targetBoneLength / sourceBoneLength;
                 }
 
-                // Calculate radius-based scale (XZ-axes)
                 float scaleXZ = 1.0f;
                 if (targetAvatarBoneRadii.TryGetValue(targetBone.name, out float targetRadius) && sourceBoneRadii.TryGetValue(sourceBone.name, out float sourceRadius))
                 {
@@ -313,7 +352,6 @@ namespace VRClothFitter
                 appliedCount++;
             }
 
-            // Setup MA Merge Armature
             var mergeArmature = clothObject.GetComponent<MA Merge Armature>();
             if (mergeArmature == null)
             {
@@ -403,7 +441,7 @@ namespace VRClothFitter
                 
                 string path = AssetDatabase.GetAssetPath(oldMat);
                 string dir = string.IsNullOrEmpty(path) ? "Assets" : Path.GetDirectoryName(path);
-                string newPath = AssetDatabase.GenerateUniqueAssetPath($"{dir}/{newMat.name}.mat");
+                string newPath = AssetDatabase.GenerateUniqueAssetPath($"{dir}/{{newMat.name}}.mat");
                 AssetDatabase.CreateAsset(newMat, newPath);
 
                 newMaterials[i] = newMat;
