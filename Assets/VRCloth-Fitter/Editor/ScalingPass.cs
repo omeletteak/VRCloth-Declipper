@@ -1,6 +1,7 @@
 using nadena.dev.ndmf;
 using UnityEngine;
 using VRClothFitter;
+using System.Collections.Generic;
 
 [assembly: ExportsPlugin(typeof(ScalingPassPlugin))]
 
