@@ -32,6 +32,12 @@ This phase marks a fundamental shift in architecture to deeply integrate with Mo
 
 ### Phase 3: Advanced Fitting Features
 
+- [ ] **Enhance Proportional Scaling with High-Precision Mode**:
+    - [ ] Add an optional "Source Avatar" field to the `VRClothFitter` component.
+    - [ ] If the "Source Avatar" is provided, the "Calculate Scale" logic will switch to a high-precision mode.
+    - [ ] This mode calculates the **true proportional difference** by directly comparing the **Source Avatar** and the **Target Avatar**.
+    - [ ] The resulting "true" scale difference is then applied to the cloth's bones, achieving unparalleled fitting accuracy.
+
 These features provide value beyond what Modular Avatar offers natively.
 
 - [x] **Advanced Mesh Deformation**:
