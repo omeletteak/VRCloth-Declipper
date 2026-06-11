@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "embedded",
+  "dolt_database": "VRCloth_Fitter",
+  "project_id": "57942d7c-6078-4032-aa27-b79d77bd3a96"
+}
