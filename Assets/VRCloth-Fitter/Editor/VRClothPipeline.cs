@@ -27,7 +27,9 @@ namespace VRClothFitter
                 Debug.LogError("Failed to generate proxy capsules. Aborting.");
                 return;
             }
-            
+            VRClothDebugVisualizer.SetCapsules(capsules);
+
+
             var penetrations = VRClothPenetrationDetector.Detect();
             Debug.Log($"Detected {penetrations} penetrations.");
 

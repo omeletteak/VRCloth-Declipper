@@ -60,6 +60,38 @@ namespace VRClothFitter
                 VRClothPipeline.Run(fitter);
             }
             GUI.enabled = true;
+
+            EditorGUILayout.Space();
+
+            // --- デバッグ表示 ---
+            EditorGUILayout.LabelField("Debug", EditorStyles.boldLabel);
+
+            VRClothDebugVisualizer.Visible = EditorGUILayout.Toggle(
+                "Show Scene Gizmos", VRClothDebugVisualizer.Visible);
+
+            EditorGUILayout.BeginHorizontal();
+            GUI.enabled = fitter.targetAvatar != null;
+            if (GUILayout.Button("Preview Body Proxy"))
+            {
+                var capsules = VRClothProxyGenerator.Generate(fitter.targetAvatar);
+                if (capsules != null)
+                {
+                    VRClothDebugVisualizer.SetCapsules(capsules);
+                }
+            }
+            GUI.enabled = true;
+            if (GUILayout.Button("Clear", GUILayout.Width(60)))
+            {
+                VRClothDebugVisualizer.Clear();
+            }
+            EditorGUILayout.EndHorizontal();
+
+            if (VRClothDebugVisualizer.CapsuleCount > 0 || VRClothDebugVisualizer.HitCount > 0)
+            {
+                EditorGUILayout.LabelField(
+                    $"Capsules: {VRClothDebugVisualizer.CapsuleCount}, Penetrating vertices: {VRClothDebugVisualizer.HitCount}",
+                    EditorStyles.miniLabel);
+            }
         }
     }
 }
