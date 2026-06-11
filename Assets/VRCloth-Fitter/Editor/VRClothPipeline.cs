@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace VRClothFitter
@@ -20,7 +21,21 @@ namespace VRClothFitter
                 Debug.Log($"Source Avatar: {fitter.sourceAvatar.name}");
             }
 
-            // TODO: 実際の処理にfitter.targetAvatarとfitter.clothToDeformを渡すように修正
+            GameObject clothRoot = fitter.clothRoot != null ? fitter.clothRoot : fitter.clothToDeform.gameObject;
+            List<ClothSnapshot> cloth = VRClothMeshCapture.Capture(clothRoot);
+            if (cloth.Count == 0)
+            {
+                Debug.LogError("VRClothFitter: No active SkinnedMeshRenderer found under the cloth root. Aborting.");
+                return;
+            }
+
+            int totalVertices = 0;
+            foreach (var snapshot in cloth)
+            {
+                totalVertices += snapshot.VertexCount;
+            }
+            Debug.Log($"[VRClothFitter] Captured {cloth.Count} renderer(s), {totalVertices} vertices in world space.");
+
             var capsules = VRClothProxyGenerator.Generate(fitter.targetAvatar);
             if (capsules == null)
             {
@@ -29,33 +44,16 @@ namespace VRClothFitter
             }
             VRClothDebugVisualizer.SetCapsules(capsules);
 
-
-            var penetrations = VRClothPenetrationDetector.Detect();
-            Debug.Log($"Detected {penetrations} penetrations.");
+            List<PenetrationHit> hits = VRClothPenetrationDetector.Detect(cloth, capsules);
+            VRClothDebugVisualizer.SetHits(hits);
+            Debug.Log($"Detected {hits.Count} penetrations.");
 
             if (fitter.mode == VRClothFitter.QualityMode.Light)
             {
                 VRClothLaplacian.Smooth();
             }
 
-            // ダミーの頂点変位データ作成
-            VRClothDiffMap diff = new VRClothDiffMap
-            {
-                metadata = $"Mode={modeStr}, Time={System.DateTime.Now}",
-                vertexOffsets = new Vector3[10] // 本来はターゲットメッシュ頂点数
-            };
-            for (int i = 0; i < diff.vertexOffsets.Length; i++)
-                diff.vertexOffsets[i] = Random.insideUnitSphere * 0.001f; // 微小な変位
-
-            // VRClothDiffApplier.SaveDiff(diff); // キャッシュ機能は未実装のため、一時的に無効化
-
             Debug.Log("[VRClothFitter] Process complete.");
-        }
-
-        public static void ClearCache()
-        {
-            // TODO: この機能も新しいUIに統合するか検討
-            // VRClothDiffApplier.ClearCache();
         }
     }
 }

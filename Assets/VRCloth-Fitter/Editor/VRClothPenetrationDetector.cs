@@ -1,14 +1,20 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace VRClothFitter
 {
     public static class VRClothPenetrationDetector
     {
-        public static int Detect()
+        /// <summary>
+        /// Marks cloth vertices that sit inside any body capsule. Receives the
+        /// captured world-space cloth geometry and the proxy capsules; returns
+        /// one <see cref="PenetrationHit"/> per penetrating vertex.
+        /// Not implemented yet — always reports zero hits.
+        /// </summary>
+        public static List<PenetrationHit> Detect(IReadOnlyList<ClothSnapshot> cloth, IReadOnlyList<BodyCapsule> capsules)
         {
-            Debug.Log("[VRClothFitter] Detecting mesh penetrations...");
-            // 実装：カプセルと衣装メッシュの距離を測定
-            return Random.Range(0, 10); // ダミーで件数返す
+            Debug.Log("[VRClothFitter] Penetration detection is not implemented yet; reporting 0 hits.");
+            return new List<PenetrationHit>();
         }
     }
 }
