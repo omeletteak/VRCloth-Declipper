@@ -18,6 +18,8 @@ namespace VRClothFitter
             // --- ターゲット設定 ---
             EditorGUILayout.LabelField("Targets", EditorStyles.boldLabel);
 
+            EditorGUI.BeginChangeCheck();
+
             fitter.targetAvatar = (GameObject)EditorGUILayout.ObjectField("Target Avatar", fitter.targetAvatar, typeof(GameObject), true);
             fitter.sourceAvatar = (GameObject)EditorGUILayout.ObjectField("Source Avatar (Optional)", fitter.sourceAvatar, typeof(GameObject), true);
 
@@ -44,6 +46,15 @@ namespace VRClothFitter
                 EditorGUI.EndDisabledGroup();
                 fitter.mode = VRClothFitter.QualityMode.Light; // 内部的に設定
                 EditorGUILayout.HelpBox("Source Avatar is not set. Only Light mode is available.", MessageType.Warning);
+            }
+
+            fitter.margin = EditorGUILayout.Slider(
+                new GUIContent("Margin (m)", "Clearance kept between the body surface and the cloth."),
+                fitter.margin, 0f, 0.05f);
+
+            if (EditorGUI.EndChangeCheck())
+            {
+                EditorUtility.SetDirty(fitter);
             }
 
             if (fitter.clothToDeform == null)

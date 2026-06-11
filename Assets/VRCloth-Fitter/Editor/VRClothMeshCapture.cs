@@ -23,6 +23,12 @@ namespace VRClothFitter
         /// </summary>
         public int[] triangles;
 
+        /// <summary>
+        /// Vertices of this renderer found inside the body, with indices into
+        /// <see cref="worldVertices"/>. Null until the detection stage runs.
+        /// </summary>
+        public List<PenetrationHit> hits;
+
         public int VertexCount => worldVertices != null ? worldVertices.Length : 0;
     }
 

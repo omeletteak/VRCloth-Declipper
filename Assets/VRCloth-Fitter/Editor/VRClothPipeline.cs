@@ -44,9 +44,9 @@ namespace VRClothFitter
             }
             VRClothDebugVisualizer.SetCapsules(capsules);
 
-            List<PenetrationHit> hits = VRClothPenetrationDetector.Detect(cloth, capsules);
+            List<PenetrationHit> hits = VRClothPenetrationDetector.Detect(cloth, capsules, fitter.margin);
             VRClothDebugVisualizer.SetHits(hits);
-            Debug.Log($"Detected {hits.Count} penetrations.");
+            Debug.Log($"[VRClothFitter] Detected {hits.Count} penetrating vertices (margin {fitter.margin:F3} m).");
 
             if (fitter.mode == VRClothFitter.QualityMode.Light)
             {

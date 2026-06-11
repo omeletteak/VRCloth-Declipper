@@ -18,6 +18,10 @@ namespace VRClothFitter
         [Header("Settings")]
         public QualityMode mode = QualityMode.Light;
 
+        [Tooltip("Clearance kept between the body surface and the cloth, in meters. Vertices closer than this count as penetrating.")]
+        [Range(0f, 0.05f)]
+        public float margin = 0.005f;
+
         private void Reset()
         {
             AutoDetectComponents();
