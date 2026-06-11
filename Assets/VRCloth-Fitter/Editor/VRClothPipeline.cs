@@ -48,6 +48,26 @@ namespace VRClothFitter
             VRClothDebugVisualizer.SetHits(hits);
             Debug.Log($"[VRClothFitter] Detected {hits.Count} penetrating vertices (margin {fitter.margin:F3} m).");
 
+            if (hits.Count > 0)
+            {
+                foreach (var snapshot in cloth)
+                {
+                    if (snapshot.hits != null && snapshot.hits.Count > 0)
+                    {
+                        PenetrationPushOut.Apply(snapshot.worldVertices, snapshot.hits, capsules, fitter.margin);
+                    }
+                }
+
+                // Self-check with a small tolerance below the exact margin
+                // surface, where pushed vertices now sit.
+                int remaining = 0;
+                foreach (var snapshot in cloth)
+                {
+                    remaining += PenetrationDetection.Scan(snapshot.worldVertices, capsules, fitter.margin - 1e-4f).Count;
+                }
+                Debug.Log($"[VRClothFitter] Pushed out {hits.Count} vertices; {remaining} still penetrating.");
+            }
+
             if (fitter.mode == VRClothFitter.QualityMode.Light)
             {
                 VRClothLaplacian.Smooth();
