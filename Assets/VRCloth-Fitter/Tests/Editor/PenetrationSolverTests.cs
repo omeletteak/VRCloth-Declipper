@@ -73,13 +73,68 @@ namespace VRClothFitter.Tests
             var capsules = SingleCapsule();
 
             var hits = PenetrationDetection.Scan(pushed, capsules, Margin);
-            PenetrationPushOut.Apply(pushed, hits, capsules, Margin);
+            var displacements = new Vector3[pushed.Length];
+            PenetrationPushOut.Apply(pushed, displacements, hits, capsules, Margin);
+            for (int v = 0; v < pushed.Length; v++)
+            {
+                pushed[v] += displacements[v];
+            }
             PenetrationSolver.Solve(solved, triangles, capsules, Margin);
 
             float pushedMaxEdge = MaxEdgeLength(pushed, triangles);
             float solvedMaxEdge = MaxEdgeLength(solved, triangles);
             Assert.Less(solvedMaxEdge, pushedMaxEdge,
                 $"solver should shorten the longest stretched edge (push-out only: {pushedMaxEdge}, solver: {solvedMaxEdge})");
+        }
+
+        // A wavy vertical sheet grazing the capsule's side: the wave troughs
+        // dip a few centimeters in, while the wave amplitude itself is larger
+        // than any penetration depth.
+        static void MakeWavySheet(int n, out Vector3[] positions, out int[] triangles)
+        {
+            positions = new Vector3[n * n];
+            for (int row = 0; row < n; row++)
+            {
+                for (int col = 0; col < n; col++)
+                {
+                    float y = 0.3f + row * 0.02f;
+                    float z = -0.2f + col * 0.02f;
+                    float x = 0.29f + 0.06f * Mathf.Sin(row * 0.9f) * Mathf.Sin(col * 1.1f);
+                    positions[row * n + col] = new Vector3(x, y, z);
+                }
+            }
+            MakeSheet(n, 0.02f, out _, out triangles); // same grid topology
+        }
+
+        [Test]
+        public void Solve_OnWavySheet_MovesNoVertexFartherThanTheCorrectionScale()
+        {
+            MakeWavySheet(21, out var positions, out var triangles);
+            var originals = (Vector3[])positions.Clone();
+            var capsules = SingleCapsule();
+
+            var initialHits = PenetrationDetection.Scan(positions, capsules, Margin);
+            Assert.Greater(initialHits.Count, 0, "test setup should start with penetration");
+            float maxDepth = 0f;
+            foreach (var hit in initialHits)
+            {
+                maxDepth = Mathf.Max(maxDepth, hit.depth);
+            }
+
+            var result = PenetrationSolver.Solve(positions, triangles, capsules, Margin);
+
+            Assert.AreEqual(0, result.finalHitCount);
+            // Smoothing the displacement field (not the positions) keeps every
+            // move on the order of the correction itself: the wavy cloth
+            // detail must not be flattened toward neighbor averages, so no
+            // vertex may travel anywhere near the wave amplitude.
+            float maxMove = 0f;
+            for (int v = 0; v < positions.Length; v++)
+            {
+                maxMove = Mathf.Max(maxMove, Vector3.Distance(originals[v], positions[v]));
+            }
+            Assert.LessOrEqual(maxMove, 2f * maxDepth,
+                $"moves should stay on the correction scale (max depth {maxDepth}, max move {maxMove})");
         }
 
         [Test]

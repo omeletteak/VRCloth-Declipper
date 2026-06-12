@@ -4,10 +4,14 @@ using UnityEngine;
 namespace VRClothFitter
 {
     /// <summary>
-    /// The fitting core: alternates push-out and region-restricted Laplacian
-    /// smoothing until nothing penetrates, ending with a push-out so the
-    /// final state is guaranteed to sit on or above the margin surface.
-    /// Operates on one in-memory position array — nothing is persisted.
+    /// The fitting core. Keeps the original geometry untouched and builds a
+    /// per-vertex displacement field: push-out writes SDF-gradient
+    /// displacements into the field, Laplacian smoothing blends the field
+    /// (never the positions, so cloth detail survives), and the
+    /// smooth → re-detect → re-push cycle repeats a few times, always ending
+    /// on a push so the final state sits on or above the margin surface.
+    /// The result, original + displacement, is composed into the caller's
+    /// position array; nothing is persisted. See docs/DESIGN.md §6.
     /// </summary>
     public static class PenetrationSolver
     {
@@ -16,7 +20,7 @@ namespace VRClothFitter
             /// <summary>Penetrating vertices before the first pass.</summary>
             public int initialHitCount;
 
-            /// <summary>Push+smooth passes actually executed.</summary>
+            /// <summary>Smooth → re-detect → re-push cycles executed.</summary>
             public int passes;
 
             /// <summary>
@@ -27,7 +31,7 @@ namespace VRClothFitter
         }
 
         // MVP tuning, exposed as parameters only for tests. Defaults follow
-        // the roadmap: 2-3 rings, a few iterations, push->smooth 2-3 times.
+        // the design: 2-3 rings, a few iterations, 2-3 smooth/re-push cycles.
         public static Result Solve(
             Vector3[] positions,
             int[] triangles,
@@ -51,34 +55,54 @@ namespace VRClothFitter
                 return result;
             }
 
-            var adjacency = VertexAdjacency.Build(positions, triangles);
+            // From here on, `positions` serves as the scratch buffer for
+            // original + displacement; the untouched copy is the reference.
+            var originals = (Vector3[])positions.Clone();
+            var displacements = new Vector3[originals.Length];
+            var adjacency = VertexAdjacency.Build(originals, triangles);
             var seeds = new HashSet<int>();
 
-            while (hits.Count > 0 && result.passes < maxPasses)
+            PenetrationPushOut.Apply(originals, displacements, hits, capsules, margin);
+            AddSeeds(seeds, hits);
+
+            while (result.passes < maxPasses)
             {
                 result.passes++;
-                PenetrationPushOut.Apply(positions, hits, capsules, margin);
-                foreach (var hit in hits)
+                var region = LaplacianSmoothing.ExpandRegion(adjacency, seeds, rings);
+                LaplacianSmoothing.Smooth(displacements, adjacency, region, lambda, smoothingIterations);
+
+                Compose(originals, displacements, positions);
+                hits = PenetrationDetection.Scan(positions, capsules, margin);
+                if (hits.Count == 0)
                 {
-                    seeds.Add(hit.vertexIndex);
+                    break;
                 }
 
-                var region = LaplacianSmoothing.ExpandRegion(adjacency, seeds, rings);
-                LaplacianSmoothing.Smooth(positions, adjacency, region, lambda, smoothingIterations);
-
-                hits = PenetrationDetection.Scan(positions, capsules, margin);
+                // Smoothing sank these below the surface again; push them
+                // back out so every cycle (and the solve) ends on a push.
+                PenetrationPushOut.Apply(originals, displacements, hits, capsules, margin);
+                AddSeeds(seeds, hits);
             }
 
-            // Smoothing ran last inside the loop, so push whatever it sank
-            // back below the surface; correctness wins over the last bit of
-            // smoothness.
-            if (hits.Count > 0)
-            {
-                PenetrationPushOut.Apply(positions, hits, capsules, margin);
-            }
-
+            Compose(originals, displacements, positions);
             result.finalHitCount = PenetrationDetection.Scan(positions, capsules, margin - 1e-4f).Count;
             return result;
+        }
+
+        static void AddSeeds(HashSet<int> seeds, List<PenetrationHit> hits)
+        {
+            foreach (var hit in hits)
+            {
+                seeds.Add(hit.vertexIndex);
+            }
+        }
+
+        static void Compose(Vector3[] originals, Vector3[] displacements, Vector3[] target)
+        {
+            for (int v = 0; v < target.Length; v++)
+            {
+                target[v] = originals[v] + displacements[v];
+            }
         }
     }
 }

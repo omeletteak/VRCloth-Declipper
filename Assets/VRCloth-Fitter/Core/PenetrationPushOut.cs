@@ -4,36 +4,41 @@ using UnityEngine;
 namespace VRClothFitter
 {
     /// <summary>
-    /// Push-out step: moves penetrating vertices onto their closest capsule's
-    /// margin surface, radially away from the capsule axis. Minimal strategy
-    /// by design — normal/projection hybrids are a later quality improvement.
+    /// Push-out step: accumulates, into a per-vertex displacement field, the
+    /// motion that puts each penetrating vertex on its closest capsule's
+    /// margin surface, along the capsule SDF gradient. Vertices are never
+    /// moved directly — the solver composes original + displacement, which
+    /// lets the smoothing stage operate on the displacement field without
+    /// touching the original geometry.
     /// </summary>
     public static class PenetrationPushOut
     {
         /// <summary>
-        /// Moves every hit vertex to sit <paramref name="margin"/> above its
-        /// closest capsule's surface, updating <paramref name="positions"/>
-        /// in place. Returns the per-vertex displacement that was applied,
-        /// zero for untouched vertices. The push starts from the vertex's
-        /// current position (not the position recorded in the hit), so the
-        /// same hit list can drive a re-push after smoothing moved vertices.
+        /// For every hit vertex, rewrites <paramref name="displacements"/> so
+        /// that original + displacement sits <paramref name="margin"/> above
+        /// the hit capsule's surface. The push starts from the vertex's
+        /// current displaced position (not the position recorded in the hit),
+        /// so the same hit list can drive a re-push after smoothing changed
+        /// the field. Entries for non-hit vertices are left untouched.
         /// </summary>
-        public static Vector3[] Apply(Vector3[] positions, IReadOnlyList<PenetrationHit> hits, IReadOnlyList<BodyCapsule> capsules, float margin)
+        public static void Apply(
+            IReadOnlyList<Vector3> originals,
+            Vector3[] displacements,
+            IReadOnlyList<PenetrationHit> hits,
+            IReadOnlyList<BodyCapsule> capsules,
+            float margin)
         {
-            var offsets = new Vector3[positions != null ? positions.Length : 0];
-            if (positions == null || hits == null || capsules == null)
+            if (originals == null || displacements == null || hits == null || capsules == null)
             {
-                return offsets;
+                return;
             }
 
             foreach (var hit in hits)
             {
-                Vector3 current = positions[hit.vertexIndex];
+                Vector3 current = originals[hit.vertexIndex] + displacements[hit.vertexIndex];
                 Vector3 target = capsules[hit.capsuleIndex].PushOut(current, margin);
-                offsets[hit.vertexIndex] = target - current;
-                positions[hit.vertexIndex] = target;
+                displacements[hit.vertexIndex] = target - originals[hit.vertexIndex];
             }
-            return offsets;
         }
     }
 }

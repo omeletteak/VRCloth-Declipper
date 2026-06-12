@@ -54,37 +54,43 @@ namespace VRClothFitter
         }
 
         /// <summary>
+        /// Normalized gradient of <see cref="SignedDistance"/> at
+        /// <paramref name="point"/>: the unit direction of fastest distance
+        /// growth, pointing away from the axis. This is the push-out
+        /// direction everywhere, inside and outside. A point exactly on the
+        /// axis (the gradient's only singularity) falls back to a fixed
+        /// perpendicular so callers always receive a usable unit vector.
+        /// </summary>
+        public Vector3 Gradient(Vector3 point)
+        {
+            Vector3 direction = point - ClosestPointOnAxis(point);
+            float distance = direction.magnitude;
+            if (distance >= 1e-9f)
+            {
+                return direction / distance;
+            }
+            Vector3 axis = end - start;
+            direction = Vector3.Cross(axis, Vector3.up);
+            if (direction.sqrMagnitude < 1e-12f)
+            {
+                direction = Vector3.Cross(axis, Vector3.right);
+            }
+            if (direction.sqrMagnitude < 1e-12f)
+            {
+                direction = Vector3.right;
+            }
+            return direction.normalized;
+        }
+
+        /// <summary>
         /// The position <paramref name="point"/> should move to so that it sits
         /// exactly <paramref name="margin"/> above the capsule surface, moving
-        /// directly away from the axis. Intended for points where
+        /// along the SDF gradient. Intended for points where
         /// <see cref="Contains"/> is true; an outside point would be pulled in.
-        /// A point exactly on the axis is pushed along a perpendicular fallback
-        /// direction.
         /// </summary>
         public Vector3 PushOut(Vector3 point, float margin = 0f)
         {
-            Vector3 axisPoint = ClosestPointOnAxis(point);
-            Vector3 direction = point - axisPoint;
-            float distance = direction.magnitude;
-            if (distance < 1e-9f)
-            {
-                Vector3 axis = end - start;
-                direction = Vector3.Cross(axis, Vector3.up);
-                if (direction.sqrMagnitude < 1e-12f)
-                {
-                    direction = Vector3.Cross(axis, Vector3.right);
-                }
-                if (direction.sqrMagnitude < 1e-12f)
-                {
-                    direction = Vector3.right;
-                }
-                direction.Normalize();
-            }
-            else
-            {
-                direction /= distance;
-            }
-            return axisPoint + direction * (radius + margin);
+            return point + (margin - SignedDistance(point)) * Gradient(point);
         }
     }
 }

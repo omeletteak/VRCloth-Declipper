@@ -83,6 +83,45 @@ namespace VRClothFitter.Tests
         }
 
         [Test]
+        public void Gradient_MatchesNumericalDerivativeOfSignedDistance()
+        {
+            var capsule = MakeCapsule();
+            var samples = new[]
+            {
+                new Vector3(0.1f, 0.5f, 0f),   // inside, cylinder section
+                new Vector3(0.5f, 0.5f, 0.2f), // outside, cylinder section
+                new Vector3(0.3f, 1.4f, 0.1f), // beyond the end cap
+                new Vector3(0.05f, -0.2f, 0f), // below the start cap, inside
+            };
+
+            const float h = 1e-3f;
+            foreach (var p in samples)
+            {
+                Vector3 analytic = capsule.Gradient(p);
+                var numeric = new Vector3(
+                    (capsule.SignedDistance(p + new Vector3(h, 0f, 0f)) - capsule.SignedDistance(p - new Vector3(h, 0f, 0f))) / (2f * h),
+                    (capsule.SignedDistance(p + new Vector3(0f, h, 0f)) - capsule.SignedDistance(p - new Vector3(0f, h, 0f))) / (2f * h),
+                    (capsule.SignedDistance(p + new Vector3(0f, 0f, h)) - capsule.SignedDistance(p - new Vector3(0f, 0f, h))) / (2f * h));
+
+                Assert.AreEqual(1f, analytic.magnitude, Eps, $"gradient should be unit length at {p}");
+                Assert.AreEqual(numeric.x, analytic.x, 1e-3f, $"x at {p}");
+                Assert.AreEqual(numeric.y, analytic.y, 1e-3f, $"y at {p}");
+                Assert.AreEqual(numeric.z, analytic.z, 1e-3f, $"z at {p}");
+            }
+        }
+
+        [Test]
+        public void Gradient_OnAxisPoint_FallsBackToUnitPerpendicular()
+        {
+            var capsule = MakeCapsule();
+
+            Vector3 gradient = capsule.Gradient(new Vector3(0f, 0.5f, 0f));
+
+            Assert.AreEqual(1f, gradient.magnitude, Eps, "fallback must be unit length");
+            Assert.AreEqual(0f, Vector3.Dot(gradient, Vector3.up), Eps, "fallback must be perpendicular to the axis");
+        }
+
+        [Test]
         public void PushOut_PenetratingPoint_LandsAtMargin()
         {
             var capsule = MakeCapsule();

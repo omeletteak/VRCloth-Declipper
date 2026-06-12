@@ -4,8 +4,12 @@ using UnityEngine;
 namespace VRClothFitter
 {
     /// <summary>
-    /// Uniform-weight Laplacian smoothing restricted to a vertex region, used
-    /// to blend the push-out step back into the surrounding cloth surface.
+    /// Uniform-weight Laplacian smoothing of a per-vertex vector field,
+    /// restricted to a vertex region. The solver smooths the push-out
+    /// displacement field (not vertex positions), so the original cloth
+    /// detail is preserved and only the correction is blended; vertices
+    /// outside the region keep their field value (zero for untouched ones)
+    /// and act as natural anchors.
     /// </summary>
     public static class LaplacianSmoothing
     {
@@ -50,15 +54,15 @@ namespace VRClothFitter
         }
 
         /// <summary>
-        /// Pulls every region vertex toward the average of its neighbors:
-        /// p' = Lerp(p, neighborAverage, lambda), repeated
+        /// Pulls every region vertex's field value toward the average of its
+        /// neighbors' values: f' = Lerp(f, neighborAverage, lambda), repeated
         /// <paramref name="iterations"/> times. Neighbors outside the region
-        /// participate in the average but never move, anchoring the boundary.
-        /// Welded clones are written together.
+        /// participate in the average but never change, anchoring the
+        /// boundary. Welded clones are written together.
         /// </summary>
-        public static void Smooth(Vector3[] positions, VertexAdjacency adjacency, HashSet<int> regionRepresentatives, float lambda, int iterations)
+        public static void Smooth(Vector3[] field, VertexAdjacency adjacency, HashSet<int> regionRepresentatives, float lambda, int iterations)
         {
-            if (positions == null || adjacency == null || regionRepresentatives == null || regionRepresentatives.Count == 0)
+            if (field == null || adjacency == null || regionRepresentatives == null || regionRepresentatives.Count == 0)
             {
                 return;
             }
@@ -77,9 +81,9 @@ namespace VRClothFitter
                     Vector3 sum = Vector3.zero;
                     for (int n = 0; n < neighbors.Count; n++)
                     {
-                        sum += positions[neighbors[n]];
+                        sum += field[neighbors[n]];
                     }
-                    Vector3 smoothed = Vector3.Lerp(positions[rep], sum / neighbors.Count, lambda);
+                    Vector3 smoothed = Vector3.Lerp(field[rep], sum / neighbors.Count, lambda);
                     updates.Add(new KeyValuePair<int, Vector3>(rep, smoothed));
                 }
 
@@ -88,7 +92,7 @@ namespace VRClothFitter
                     var clones = adjacency.MembersOf(update.Key);
                     for (int m = 0; m < clones.Count; m++)
                     {
-                        positions[clones[m]] = update.Value;
+                        field[clones[m]] = update.Value;
                     }
                 }
             }
