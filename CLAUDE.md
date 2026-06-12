@@ -53,18 +53,33 @@ bd close <id>         # Complete work
 
 ## Build & Test
 
-_Add your build and test commands here_
+Unity 2022.3.22f1 の EditMode テストをバッチモードで実行する(Unity がこのプロジェクトを開いていると失敗する。先に閉じること):
 
-```bash
-# Example:
-# npm install
-# npm test
+```powershell
+& "C:\Program Files\Unity\Hub\Editor\2022.3.22f1\Editor\Unity.exe" -batchmode `
+  -projectPath "C:\Users\omelette_ak\github-repos\VRCloth-Fitter" `
+  -runTests -testPlatform EditMode `
+  -testResults "$env:TEMP\vrcloth-test-results.xml" -logFile "$env:TEMP\vrcloth-test-log.txt"
 ```
+
+- 終了コード: 0=全件成功 / 2=テスト失敗あり / それ以外=コンパイルエラー等(ログを確認)
+- 失敗の詳細は結果 XML の `//test-case[@result='Failed']`、コンパイルエラーはログの `error CS` を見る
+- `-testFilter "VRClothFitter.Tests.クラス名"` で絞り込み実行できる
 
 ## Architecture Overview
 
-_Add a brief overview of your project architecture_
+VRChat アバター衣装の貫通自動修正を行う Unity エディタ拡張。4アセンブリ構成(すべて `Assets/VRCloth-Fitter/` 配下):
+
+- **Core**(`VRClothFitter.Core`)— エディタ非依存の幾何計算。カプセル距離・貫通検出・押し出し・Laplacian 平滑化・スキニング数学(`SkinningMath`)
+- **Runtime**(`VRClothFitter.Runtime`)— シーンに置く `VRClothFitter` コンポーネント(設定の入れ物)のみ
+- **Editor**(`VRClothFitter.Editor`)— パイプライン本体。`VRClothPipeline.Run()` が キャプチャ(`BakeMesh`)→ Humanoid ボーンからカプセル生成 → `PenetrationSolver`(押し出し+平滑化の反復)→ 逆スキニングでメッシュ複製へ書き戻し(`VRClothMeshApplier`)。シーンビュー可視化とインスペクタ GUI もこの層
+- **Tests.Editor** — EditMode テスト(Core 直叩き+実 SkinnedMeshRenderer でのラウンドトリップ)
+
+座標規約: キャプチャは `BakeMesh(useScale: false)` + `TRS(position, rotation, scale=1)` でワールド化し、書き戻しはブレンドスキン行列の逆行列で戻す(`SkinnedRoundTripTests` がこの整合を Unity 実スキニングと突き合わせて検証)。
 
 ## Conventions & Patterns
 
-_Add your project-specific conventions here_
+- **No Cache 原則** — アバター素体形状を復元しうる中間データを保存・出力しない。`ClothSnapshot` はメモリ内のみ、フィット結果のメッシュ複製もアセット化しない(シーン内完結)
+- `Assets/` 配下の `.meta` ファイルは必ずコミットに含める
+- コミットメッセージは `feat(fitting): 日本語要約 (bd-issue-id)` 形式
+- タスク管理は bd(beads)。ただし `bd create` は現在使用禁止(DB分裂の経緯あり)— 新規タスクは ROADMAP.md か既存 issue の notes へ
