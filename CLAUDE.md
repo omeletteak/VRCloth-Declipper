@@ -66,6 +66,8 @@ Unity 2022.3.22f1 の EditMode テストをバッチモードで実行する(Uni
 - 失敗の詳細は結果 XML の `//test-case[@result='Failed']`、コンパイルエラーはログの `error CS` を見る
 - `-testFilter "VRClothFitter.Tests.クラス名"` で絞り込み実行できる
 
+実機での目視 E2E テストの手順は [docs/E2E_TEST_GUIDE.md](docs/E2E_TEST_GUIDE.md)(ユーザーが GUI で実施。エージェントは実行できない)。
+
 ## Architecture Overview
 
 VRChat アバター衣装の貫通自動修正を行う Unity エディタ拡張。4アセンブリ構成(すべて `Assets/VRCloth-Fitter/` 配下):
