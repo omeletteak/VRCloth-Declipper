@@ -86,6 +86,8 @@ VRCloth-Fitter はここを自動化します。**どの方法で着せたかは
 
 - 平滑化は変位を侵入側へ戻しうるため、必ず再検出と再押し出しが後に続き、**シーケンスの最後は押し出しで終わる**。これにより最終状態の侵入ゼロが構成的に保証される
 
+なお、この平滑化方式の限界と発展候補(変位場の調和補間、XPBD、ARAP、RBF 空間変形場)の比較検討は [DEFORMATION_METHODS.md](DEFORMATION_METHODS.md) にまとめています。採用を決めた手法は本節に昇格させます。
+
 **コード配置:**
 
 - `Assets/VRCloth-Fitter/Core/` — 純粋な数学・型(`BodyCapsule`、`PenetrationHit`)。asmdef 化済みで EditMode テストの対象
