@@ -52,13 +52,20 @@ namespace VRClothFitter
             {
                 int passes = 0;
                 int remaining = 0;
+                int applied = 0;
                 foreach (var snapshot in cloth)
                 {
                     var result = PenetrationSolver.Solve(snapshot.worldVertices, snapshot.triangles, capsules, fitter.margin);
                     passes = Mathf.Max(passes, result.passes);
                     remaining += result.finalHitCount;
+                    if (result.initialHitCount > 0)
+                    {
+                        VRClothMeshApplier.Apply(snapshot);
+                        applied++;
+                    }
                 }
                 Debug.Log($"[VRClothFitter] Push-out + smoothing finished after {passes} pass(es); {remaining} vertices still penetrating.");
+                Debug.Log($"[VRClothFitter] Applied fitted mesh copies to {applied} renderer(s). Originals untouched; Undo (Ctrl+Z) restores.");
             }
 
             Debug.Log("[VRClothFitter] Process complete.");
