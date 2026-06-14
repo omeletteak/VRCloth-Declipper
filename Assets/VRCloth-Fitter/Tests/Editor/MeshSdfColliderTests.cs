@@ -173,6 +173,31 @@ namespace VRClothFitter.Tests
         }
 
         [Test]
+        public void Accelerated_MatchesBruteForceReference_OnADenseMesh()
+        {
+            // The BVH closest point is exact and the Barnes–Hut winding stays
+            // correct near the surface, so the accelerated signed distance must
+            // agree with the unaccelerated reference everywhere.
+            BuildSphere(out Vector3[] verts, out int[] tris, 0.2f, 18, 24);
+            var collider = new MeshSdfCollider(verts, tris);
+
+            var rng = new System.Random(12345);
+            int checks = 0;
+            for (int i = 0; i < 400; i++)
+            {
+                var p = new Vector3(
+                    (float)(rng.NextDouble() * 0.8 - 0.4),
+                    (float)(rng.NextDouble() * 0.8 - 0.4),
+                    (float)(rng.NextDouble() * 0.8 - 0.4));
+                float accel = collider.SignedDistance(p);
+                float brute = MeshSdfCollider.SignedDistanceBruteForce(verts, tris, p);
+                Assert.AreEqual(brute, accel, 1e-4f, $"signed distance mismatch at {p}");
+                checks++;
+            }
+            Assert.Greater(checks, 0);
+        }
+
+        [Test]
         public void Solver_ColliderOverload_RemovesPenetration()
         {
             var cube = Cube();
@@ -190,6 +215,34 @@ namespace VRClothFitter.Tests
             Assert.Greater(result.initialHitCount, 0, "the buried vertex should be detected");
             Assert.AreEqual(0, result.finalHitCount, "no vertex should remain penetrating");
             Assert.GreaterOrEqual(cube.SignedDistance(positions[0]), 0.01f - 1e-3f, "the vertex ends on the margin surface");
+        }
+
+        static void BuildSphere(out Vector3[] verts, out int[] tris, float radius, int rings, int sectors)
+        {
+            var v = new List<Vector3>();
+            for (int i = 0; i <= rings; i++)
+            {
+                float phi = Mathf.PI * i / rings;
+                float sinP = Mathf.Sin(phi), cosP = Mathf.Cos(phi);
+                for (int j = 0; j <= sectors; j++)
+                {
+                    float theta = 2f * Mathf.PI * j / sectors;
+                    v.Add(new Vector3(radius * sinP * Mathf.Cos(theta), radius * cosP, radius * sinP * Mathf.Sin(theta)));
+                }
+            }
+            var t = new List<int>();
+            int stride = sectors + 1;
+            for (int i = 0; i < rings; i++)
+            {
+                for (int j = 0; j < sectors; j++)
+                {
+                    int a = i * stride + j, b = a + 1, c = a + stride, d = c + 1;
+                    t.Add(a); t.Add(c); t.Add(b);
+                    t.Add(b); t.Add(c); t.Add(d);
+                }
+            }
+            verts = v.ToArray();
+            tris = t.ToArray();
         }
 
         static int[] Truncated(int[] tris, int dropTriangles)

@@ -7,12 +7,12 @@ namespace VRClothFitter.Tests
 {
     /// <summary>
     /// A throwaway benchmark (not part of the normal suite — marked Explicit)
-    /// that times the brute-force mesh-SDF on a realistically sized body, to
-    /// pre-answer the performance / BVH-need question the E2E gate raises
-    /// (docs/E2E_TEST_GUIDE.md, docs/DESIGN.md §6). Run it on demand with:
-    ///   -testFilter "VRClothFitter.Tests.MeshSdfPerformanceTests"
-    /// Results are logged with the BENCH marker so they can be read back from
-    /// the Unity log.
+    /// that times the mesh-SDF scan on a realistically sized body, tracking the
+    /// performance the E2E gate cares about (docs/E2E_TEST_GUIDE.md,
+    /// docs/DESIGN.md §6). The brute-force baseline measured ~16.4 s/scan on
+    /// this mesh; the BVH + Barnes–Hut winding brought it to ~60 ms. Run on
+    /// demand with: -testFilter "VRClothFitter.Tests.MeshSdfPerformanceTests".
+    /// Results are logged with the BENCH marker for reading back from the log.
     /// </summary>
     [Explicit]
     public class MeshSdfPerformanceTests
@@ -20,7 +20,7 @@ namespace VRClothFitter.Tests
         const float A = 0.16f, B = 0.32f, C = 0.11f;
 
         [Test]
-        public void Benchmark_BruteForceScan_OnBodySizedMesh()
+        public void Benchmark_Scan_OnBodySizedMesh()
         {
             // ~50k-triangle body — the scale of a real avatar torso/body mesh.
             BuildEllipsoid(out Vector3[] bodyVerts, out int[] bodyTris, 140, 180);
