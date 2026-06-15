@@ -4,7 +4,18 @@ using UnityEngine;
 
 namespace VRClothFitter
 {
+    // Implements VRC.SDKBase.IEditorOnly when the VRChat SDK is present, so the
+    // VRChat build pipeline strips this setup component from the uploaded
+    // avatar (it carries fit settings only — nothing should ship). The SDK is
+    // always present for real use: the package's vpmDependencies (Modular
+    // Avatar / NDMF) require com.vrchat.avatars. The versionDefines guard keeps
+    // the Runtime assembly compiling in SDK-less environments (e.g. headless
+    // CI). Referencing the SDK is not redistributing it (docs/VPM_PACKAGING.md §2).
+#if VRCLOTH_VRCSDK3_AVATARS
+    public class VRClothFitter : MonoBehaviour, VRC.SDKBase.IEditorOnly
+#else
     public class VRClothFitter : MonoBehaviour
+#endif
     {
         [Header("Targets")]
         public GameObject targetAvatar;
