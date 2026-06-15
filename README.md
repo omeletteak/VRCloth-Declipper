@@ -4,9 +4,11 @@
 [![Unity](https://img.shields.io/badge/Unity-2022.3-blue.svg)](#動作環境)
 [![Status](https://img.shields.io/badge/Status-WIP-orange.svg)](#開発状況)
 
+*English: [README(en).md](README(en).md)*
+
 **着せた後の衣装貫通を自動修正する、オープンソースのUnityエディタツールです。**
 
-*An open-source Unity editor tool that auto-fixes body-through-clothing clipping left after dressing a VRChat avatar (e.g., via Modular Avatar's Merge Armature). Documentation is currently Japanese-only; an English README is planned.*
+*An open-source Unity editor tool that auto-fixes body-through-clothing clipping left after dressing a VRChat avatar (e.g., via Modular Avatar's Merge Armature). See [README(en).md](README(en).md); detailed docs are Japanese-only.*
 
 Modular Avatar の Merge Armature(Setup Outfit)で衣装を着せても、体型の差で素体が衣装を突き抜ける「貫通」は残ります。VRCloth-Fitter はこの貫通を、貫通検出 → 押し出し → ラプラシアン平滑化のパイプラインで自動修正します。
 

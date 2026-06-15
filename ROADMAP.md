@@ -40,7 +40,7 @@
 - [ ] **関節部の可変マージン** — 関節をまたぐウェイトを持つ頂点のマージンを増し、曲げ起因の貫通への安価な保険とする(本命は上のポーズ対応。背景は [docs/DEFORMATION_METHODS.md](docs/DEFORMATION_METHODS.md) §5)
 - [ ] **マスクペイント** — 修正したくない部位の除外
 - [ ] **Before/After 比較** — 修正結果の確認 UI
-- [ ] **英語版 README** — README(en).md を追加して相互リンク(現状は冒頭の英語1行サマリのみ)
+- [x] **英語版 README** — [README(en).md](README(en).md) を追加し、日本語 README と相互リンク(2026-06-15)。本体ドキュメント(DESIGN 等)は日本語のまま
 
 ## フェーズ4: 拡張(将来)
 
