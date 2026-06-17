@@ -154,6 +154,70 @@ namespace VRClothFitter.Tests
             CollectionAssert.AreEqual(before, positions);
         }
 
+        [Test]
+        public void SolveProjected_ResolvesAllPenetration()
+        {
+            MakeSheet(21, 0.05f, out var positions, out var triangles);
+            var capsules = SingleCapsule();
+
+            var result = PenetrationSolver.SolveProjected(positions, triangles, capsules, Margin);
+
+            Assert.Greater(result.initialHitCount, 0);
+            Assert.AreEqual(0, result.finalHitCount);
+            Assert.AreEqual(0, PenetrationDetection.Scan(positions, capsules, Margin - 1e-4f).Count);
+        }
+
+        [Test]
+        public void SolveProjected_LeavesFarVerticesUntouched()
+        {
+            MakeSheet(21, 0.05f, out var positions, out var triangles);
+            Vector3 corner = positions[0];
+
+            PenetrationSolver.SolveProjected(positions, triangles, SingleCapsule(), Margin);
+
+            Assert.AreEqual(corner, positions[0]);
+        }
+
+        [Test]
+        public void SolveProjected_ProducesSmootherResultThanPushOutAlone()
+        {
+            MakeSheet(21, 0.05f, out var pushed, out var triangles);
+            MakeSheet(21, 0.05f, out var solved, out _);
+            var capsules = SingleCapsule();
+
+            var hits = PenetrationDetection.Scan(pushed, capsules, Margin);
+            var displacements = new Vector3[pushed.Length];
+            PenetrationPushOut.Apply(pushed, displacements, hits, capsules, Margin);
+            for (int v = 0; v < pushed.Length; v++)
+            {
+                pushed[v] += displacements[v];
+            }
+            PenetrationSolver.SolveProjected(solved, triangles, capsules, Margin);
+
+            Assert.Less(MaxEdgeLength(solved, triangles), MaxEdgeLength(pushed, triangles),
+                "projected solve should shorten the longest stretched edge vs push-out only");
+        }
+
+        // The point of the normal/tangent split: because every iteration ends
+        // by re-projecting penetrating vertices to the margin surface, adding
+        // smoothing iterations only smooths more — it never lets the field sink
+        // back into the body. So penetration stays resolved across a wide range
+        // of iteration counts, unlike the coarse solve's λ/pass balancing act.
+        [Test]
+        public void SolveProjected_StaysResolvedAcrossIterationCounts()
+        {
+            var capsules = SingleCapsule();
+            foreach (int iterations in new[] { 1, 2, 4, 8, 16, 40 })
+            {
+                MakeSheet(21, 0.05f, out var positions, out var triangles);
+                var result = PenetrationSolver.SolveProjected(positions, triangles, capsules, Margin, iterations: iterations);
+
+                Assert.AreEqual(0, result.finalHitCount, $"sank back at iterations={iterations}");
+                Assert.AreEqual(0, PenetrationDetection.Scan(positions, capsules, Margin - 1e-4f).Count,
+                    $"residual penetration at iterations={iterations}");
+            }
+        }
+
         static float MaxEdgeLength(Vector3[] positions, int[] triangles)
         {
             float max = 0f;
