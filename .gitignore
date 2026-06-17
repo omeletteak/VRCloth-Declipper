@@ -82,11 +82,6 @@ crash.log
 *.bat
 /Memos/
 
-# Beads / Dolt files (added by bd init)
-.dolt/
-*.db
-.beads-credential-key
-
 # VPM-managed packages — restore with ALCOM/VCC or `vrc-get resolve`.
 # Only the manifests at Packages/ root stay tracked; the package
 # contents (VRChat SDK etc.) must never be committed (redistribution
