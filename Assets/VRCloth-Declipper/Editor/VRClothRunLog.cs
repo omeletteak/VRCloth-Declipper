@@ -185,6 +185,7 @@ namespace VRClothDeclipper
                 {
                     name = name,
                     verdict = r.verdict.ToString(),
+                    redCause = r.redCause != RedCause.None ? r.redCause.ToString() : "",
                     vertexCount = r.vertexCount,
                     penetratingCount = r.penetratingCount,
                     penetratingRatio = r.penetratingRatio,
@@ -254,6 +255,7 @@ namespace VRClothDeclipper
         {
             public string name;
             public string verdict;
+            public string redCause;
             public int vertexCount;
             public int penetratingCount;
             public float penetratingRatio;

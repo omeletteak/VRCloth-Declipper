@@ -21,6 +21,7 @@ namespace VRClothDeclipper
             foreach (var snapshot in cloth)
             {
                 snapshot.hits = PenetrationDetection.Scan(snapshot.worldVertices, capsules, margin);
+                ExcludeCollapsed(snapshot);
                 allHits.AddRange(snapshot.hits);
             }
             return allHits;
@@ -41,9 +42,26 @@ namespace VRClothDeclipper
             foreach (var snapshot in cloth)
             {
                 snapshot.hits = PenetrationDetection.Scan(snapshot.worldVertices, collider, margin);
+                ExcludeCollapsed(snapshot);
                 allHits.AddRange(snapshot.hits);
             }
             return allHits;
+        }
+
+        /// <summary>
+        /// Drops hits on vertices the mesh has folded to ~zero area (a
+        /// shrink/hide blendshape). They penetrate deeply but are not a visible
+        /// surface; keeping them would force a false RED and skip the renderer,
+        /// leaving the visible penetration unfixed (ROADMAP phase 3).
+        /// </summary>
+        static void ExcludeCollapsed(ClothSnapshot snapshot)
+        {
+            var collapsed = CollapsedVertices.Find(snapshot.worldVertices, snapshot.triangles);
+            if (collapsed.Count == 0)
+            {
+                return;
+            }
+            snapshot.hits.RemoveAll(hit => collapsed.Contains(hit.vertexIndex));
         }
     }
 }

@@ -18,6 +18,35 @@ namespace VRClothDeclipper
         Red,
     }
 
+    /// <summary>
+    /// Why a renderer came back <see cref="PreflightVerdict.Red"/>. RED has two
+    /// very different root causes that need different user action, and the
+    /// dangerous one (a shrink/hide blendshape folding cloth into the body) is
+    /// hard to spot by eye — the collapsed part just looks like intended design
+    /// (docs/DESIGN.md §9, ROADMAP phase 3). Naming the cause from the numeric
+    /// signature lets the message point at the real fix.
+    /// </summary>
+    public enum RedCause
+    {
+        /// <summary>Not a Red verdict.</summary>
+        None,
+
+        /// <summary>
+        /// Broad, size-class mismatch: penetration spread across the surface at
+        /// plausible body-difference depths. Genuinely out of scope (a
+        /// retargeting job), as the legacy message says.
+        /// </summary>
+        RetargetingClassDifference,
+
+        /// <summary>
+        /// Pathologically deep <em>and</em> concentrated in one patch — the
+        /// signature of a shrink/hide blendshape collapsing vertices into the
+        /// body core. Not a body-shape difference; the fix is to neutralize the
+        /// blendshape, so the message must say so rather than blame retargeting.
+        /// </summary>
+        CollapsedShapeKey,
+    }
+
     public struct PreflightReport
     {
         public int vertexCount;
@@ -44,6 +73,13 @@ namespace VRClothDeclipper
         public float largestPatchRatio;
 
         public PreflightVerdict verdict;
+
+        /// <summary>
+        /// Root cause when <see cref="verdict"/> is Red; <see cref="RedCause.None"/>
+        /// otherwise. Drives the user-facing message (collapsed blendshape vs
+        /// genuine retargeting-class difference).
+        /// </summary>
+        public RedCause redCause;
     }
 
     /// <summary>
@@ -62,6 +98,13 @@ namespace VRClothDeclipper
         public const float GreenMaxPenetratingRatio = 0.10f;
         public const float RedDepth = 0.03f;
         public const float RedPenetratingRatio = 0.30f;
+
+        // Red-cause signature thresholds (provisional; calibrate with the
+        // verdict thresholds during E2E). A collapsed shrink/hide blendshape
+        // shows up as pathological depth — far past any plausible body-shape
+        // difference — concentrated in a single connected patch.
+        public const float CollapseDepth = 0.05f;          // >> RedDepth
+        public const float CollapseClusterShare = 0.5f;    // patch holds ≥ half the penetrating verts
 
         public static PreflightReport Evaluate(
             Vector3[] positions,
@@ -153,6 +196,7 @@ namespace VRClothDeclipper
             report.p95Depth = Percentile95(depths);
             report.largestPatchRatio = LargestPatchRatio(positions, triangles, penetratingVertices);
             report.verdict = Judge(report);
+            report.redCause = ClassifyRedCause(report);
             return report;
         }
 
@@ -169,6 +213,25 @@ namespace VRClothDeclipper
                 return PreflightVerdict.Green;
             }
             return PreflightVerdict.Yellow;
+        }
+
+        /// <summary>
+        /// Distinguishes a collapsed shrink/hide blendshape (deep <em>and</em>
+        /// concentrated in one patch) from a genuine retargeting-class misfit.
+        /// Patch concentration is measured relative to how much penetrates, so a
+        /// small-but-deep folded clump still reads as collapsed even when the
+        /// overall penetrating ratio is modest.
+        /// </summary>
+        static RedCause ClassifyRedCause(PreflightReport report)
+        {
+            if (report.verdict != PreflightVerdict.Red)
+            {
+                return RedCause.None;
+            }
+            bool deep = report.maxDepth >= CollapseDepth;
+            bool clustered = report.penetratingRatio > 0f
+                && report.largestPatchRatio >= report.penetratingRatio * CollapseClusterShare;
+            return deep && clustered ? RedCause.CollapsedShapeKey : RedCause.RetargetingClassDifference;
         }
 
         static float Percentile95(List<float> depths)

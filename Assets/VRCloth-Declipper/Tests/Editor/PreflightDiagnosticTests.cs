@@ -49,6 +49,7 @@ namespace VRClothDeclipper.Tests
             Assert.AreEqual(0, report.hitCount);
             Assert.AreEqual(0, report.penetratingCount);
             Assert.AreEqual(0f, report.maxDepth);
+            Assert.AreEqual(RedCause.None, report.redCause, "non-Red verdicts carry no cause");
         }
 
         [Test]
@@ -136,6 +137,8 @@ namespace VRClothDeclipper.Tests
             var report = Evaluate(positions, SingleCapsule());
 
             Assert.AreEqual(PreflightVerdict.Red, report.verdict);
+            Assert.AreEqual(RedCause.RetargetingClassDifference, report.redCause,
+                "4 cm deep but not pathological and not a clustered patch: retargeting-class");
         }
 
         [Test]
@@ -157,6 +160,48 @@ namespace VRClothDeclipper.Tests
 
             Assert.AreEqual(PreflightVerdict.Red, report.verdict);
             Assert.AreEqual(0.4f, report.penetratingRatio, Eps);
+            Assert.AreEqual(RedCause.RetargetingClassDifference, report.redCause,
+                "shallow + broadly spread: a size-class misfit, not a collapsed shape");
+        }
+
+        [Test]
+        public void DeepConcentratedPatch_IsRed_NamedAsCollapsedShapeKey()
+        {
+            // Three edge-connected vertices folded 6 cm into the body (past the
+            // 5 cm collapse threshold) out of 20 — the signature of a shrink/hide
+            // blendshape: deep and clumped, even though only 15% penetrate.
+            var positions = new Vector3[20];
+            positions[0] = AtSurfaceDepth(0.06f, 0.25f, 0.00f);
+            positions[1] = AtSurfaceDepth(0.06f, 0.25f, 0.01f);
+            positions[2] = AtSurfaceDepth(0.06f, 0.25f, 0.02f);
+            for (int i = 3; i < positions.Length; i++)
+            {
+                positions[i] = FarOutside(i);
+            }
+            var triangles = new[] { 0, 1, 2 }; // one connected patch
+
+            var report = Evaluate(positions, SingleCapsule(), triangles);
+
+            Assert.AreEqual(PreflightVerdict.Red, report.verdict);
+            Assert.AreEqual(3, report.penetratingCount);
+            Assert.AreEqual(3f / 20f, report.largestPatchRatio, Eps);
+            Assert.AreEqual(RedCause.CollapsedShapeKey, report.redCause);
+        }
+
+        [Test]
+        public void YellowVerdict_CarriesNoRedCause()
+        {
+            var positions = new Vector3[12];
+            positions[0] = AtSurfaceDepth(0.02f); // mid-depth: Yellow
+            for (int i = 1; i < positions.Length; i++)
+            {
+                positions[i] = FarOutside(i);
+            }
+
+            var report = Evaluate(positions, SingleCapsule());
+
+            Assert.AreEqual(PreflightVerdict.Yellow, report.verdict);
+            Assert.AreEqual(RedCause.None, report.redCause);
         }
 
         [Test]

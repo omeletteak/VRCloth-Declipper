@@ -89,9 +89,10 @@ namespace VRClothDeclipper
                 Debug.Log(FormatPreflight(snapshot.renderer.name, reports[i]));
                 if (reports[i].verdict == PreflightVerdict.Red)
                 {
+                    string cause = DescribeRedCause(reports[i].redCause);
                     Debug.LogWarning(fitter.forceApplyOutOfRange
-                        ? $"[VRClothDeclipper] {snapshot.renderer.name}: RED, but Force Apply (Out of Range) is enabled — applying anyway. Expect artifacts; this is retargeting-class difference (docs/DESIGN.md §9)."
-                        : $"[VRClothDeclipper] {snapshot.renderer.name}: body-shape difference exceeds the supported range — apply will be skipped (docs/DESIGN.md §9). Enable 'Force Apply (Out of Range)' to override.");
+                        ? $"[VRClothDeclipper] {snapshot.renderer.name}: RED ({cause}), but Force Apply (Out of Range) is enabled — applying anyway. Expect artifacts (docs/DESIGN.md §9)."
+                        : $"[VRClothDeclipper] {snapshot.renderer.name}: RED — {cause} Apply will be skipped (docs/DESIGN.md §9). Enable 'Force Apply (Out of Range)' to override.");
                 }
             }
 
@@ -139,11 +140,33 @@ namespace VRClothDeclipper
         static string FormatPreflight(string rendererName, PreflightReport report)
         {
             string verdict = report.verdict.ToString().ToUpperInvariant();
+            if (report.redCause == RedCause.CollapsedShapeKey)
+            {
+                verdict += " (collapsed blendshape?)";
+            }
             return $"[VRClothDeclipper] Preflight {rendererName}: {verdict} — "
                 + $"penetrating {report.penetratingCount}/{report.vertexCount} verts ({report.penetratingRatio:P1}), "
                 + $"max {report.maxDepth * 1000f:F1} mm below surface ({report.maxDepthOverRadius:P0} of capsule radius), "
                 + $"p95 {report.p95Depth * 1000f:F1} mm, largest patch {report.largestPatchRatio:P1}, "
                 + $"margin-zone hits {report.hitCount}.";
+        }
+
+        /// <summary>
+        /// User-facing reason for a Red verdict. The collapsed-blendshape case
+        /// is named explicitly because it is otherwise hard to discover — the
+        /// folded cloth reads as intended design (ROADMAP phase 3).
+        /// </summary>
+        static string DescribeRedCause(RedCause cause)
+        {
+            switch (cause)
+            {
+                case RedCause.CollapsedShapeKey:
+                    return "likely a shrink/hide blendshape folding cloth deep into the body, "
+                        + "not a body-shape difference — check this mesh's blendshapes (neutralize the shrink/hide shape).";
+                case RedCause.RetargetingClassDifference:
+                default:
+                    return "body-shape difference exceeds the supported range (retargeting-class).";
+            }
         }
     }
 }
