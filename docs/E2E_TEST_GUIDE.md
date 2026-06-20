@@ -95,6 +95,27 @@ max 0.0 mm below surface (0% of capsule radius), p95 0.0 mm, largest patch 0.0%,
 3. 期待値: カプセルで赤・黄だった胴・足の偽貫通が **GREEN に近づく**(`penetrating` が大きく減る)。これがメッシュSDFバックエンドの合否信号
 4. 確認ポイント: カプセル backend と mesh backend の Preflight 数値を並べて控える。残る偽貫通(素体メッシュの穴・裏面・別パーツ干渉)があれば箇所と数値を控える
 
+### 3.1 ヘッドレス preflight(GUI を開かず数値だけ取る)
+
+目視は不要で **Preflight の数値判定(GREEN/YELLOW/RED + 深さ・侵入率・比率)だけ欲しい**ときは、Unity GUI を開かず batchmode で回せる。シーンに VRClothDeclipper を載せた状態を1つ保存すれば、以後は何度でもヘッドレスで回せる(段階1=マージ前シーンでも、段階2=Bake 後にコンポーネントを付け直したシーンでも、対象は「そのシーンのアクティブな VRClothDeclipper」)。
+
+```powershell
+& "C:\Program Files\Unity\Hub\Editor\2022.3.22f1\Editor\Unity.exe" -batchmode -nographics `
+  -projectPath "<アバタープロジェクト>" `
+  -executeMethod VRClothDeclipper.VRClothPreflightCli.Run `
+  -vrclothScene "Assets/.../YourScene.unity" `
+  -vrclothOut "$env:TEMP\vrcloth-preflight.json" `
+  -logFile "$env:TEMP\vrcloth-preflight-log.txt"
+```
+
+- シーン内の**アクティブな** VRClothDeclipper を全て preflight し、`-vrclothOut` の **JSON** に per-renderer の `verdict`/`penetratingCount`/`maxDepthMm`/`largestPatchRatio`/`redCause`/`backend` 等と、全体の `worstVerdict` を書く
+- **何も書き戻さない**(solve/apply しない)= No Cache 維持
+- 終了コード: **0=実行成功**(判定は JSON を読む。RED でも 0)/ **非0=エラー**(コンポーネント無し=2 / 例外=3)
+- 前提: ①そのプロジェクトを Unity **GUI で開いていない**こと(テスト実行と同じ制約)②ツールがそのプロジェクトに**導入済み**(VPM かジャンクション、[DESIGN.md](DESIGN.md) §7)③`-vrclothScene` 省略時は開いているシーンを使う
+- Mesh SDF / margin 等は各 VRClothDeclipper コンポーネントの設定値をそのまま使う(GUI の Run Fitting と同条件)
+
+> 目視ゲート(シルエット・肌見せ境界の崩れ)は依然として人手。これは「計算合否」を GUI 操作なしで取るための経路で、§4 以降の最終判定の前さばき・回帰確認に使う。
+
 ## 4. 段階2: Manual Bake 後の検証(マージ後・本番相当)
 
 ここが**最終判定**です。`Manual Bake Avatar` でマージ後の状態を作り、本番(NDMFパス)に近い条件でクロステストとソルバ比較を行います。

@@ -5,12 +5,34 @@ namespace VRClothDeclipper
 {
     public static class VRClothPipeline
     {
-        public static void Run(VRClothDeclipper fitter)
+        /// <summary>
+        /// Everything the pipeline computes before solving: the captured cloth,
+        /// the body proxy, the chosen collider backend, the detected hits and the
+        /// per-renderer preflight reports. Shared by <see cref="Run"/> and the
+        /// headless preflight CLI (<see cref="VRClothPreflightCli"/>) so both
+        /// judge identically.
+        /// </summary>
+        public class PreflightResult
+        {
+            public List<ClothSnapshot> cloth;
+            public List<BodyCapsule> capsules;
+            public IBodyCollider collider;
+            public string backend;
+            public List<PenetrationHit> hits;
+            public PreflightReport[] reports;
+        }
+
+        /// <summary>
+        /// Capture → proxy → detect → preflight, with no solve and no write-back.
+        /// Returns null (after logging the reason) when inputs are missing or
+        /// nothing is capturable. Nothing is serialized — No Cache holds.
+        /// </summary>
+        public static PreflightResult CaptureAndPreflight(VRClothDeclipper fitter)
         {
             if (fitter == null || fitter.targetAvatar == null || fitter.clothToDeform == null)
             {
                 Debug.LogError("VRClothDeclipper: Target Avatar or Cloth is not set.");
-                return;
+                return null;
             }
 
             string modeStr = fitter.mode.ToString();
@@ -26,7 +48,7 @@ namespace VRClothDeclipper
             if (cloth.Count == 0)
             {
                 Debug.LogError("VRClothDeclipper: No active SkinnedMeshRenderer found under the cloth root. Aborting.");
-                return;
+                return null;
             }
 
             int totalVertices = 0;
@@ -40,7 +62,7 @@ namespace VRClothDeclipper
             if (capsules == null)
             {
                 Debug.LogError("Failed to generate proxy capsules. Aborting.");
-                return;
+                return null;
             }
             if (fitter.estimateRadiiFromBody)
             {
@@ -79,20 +101,46 @@ namespace VRClothDeclipper
             // Preflight: judge per renderer whether the body-shape difference
             // is within the supported envelope (docs/DESIGN.md §9).
             var reports = new PreflightReport[cloth.Count];
-            var verdicts = new PreflightVerdict[cloth.Count];
             for (int i = 0; i < cloth.Count; i++)
             {
                 var snapshot = cloth[i];
                 reports[i] = PreflightDiagnostic.Evaluate(
                     snapshot.worldVertices, snapshot.triangles, snapshot.hits, collider, fitter.margin);
-                verdicts[i] = reports[i].verdict;
                 Debug.Log(FormatPreflight(snapshot.renderer.name, reports[i]));
+            }
+
+            return new PreflightResult
+            {
+                cloth = cloth,
+                capsules = capsules,
+                collider = collider,
+                backend = backend,
+                hits = hits,
+                reports = reports,
+            };
+        }
+
+        public static void Run(VRClothDeclipper fitter)
+        {
+            var pf = CaptureAndPreflight(fitter);
+            if (pf == null)
+            {
+                return;
+            }
+            var cloth = pf.cloth;
+            var hits = pf.hits;
+            var reports = pf.reports;
+
+            // Preflight RED is apply-specific: warn here, and (unless forced)
+            // skip the renderer in the solve loop below (docs/DESIGN.md §9).
+            for (int i = 0; i < cloth.Count; i++)
+            {
                 if (reports[i].verdict == PreflightVerdict.Red)
                 {
                     string cause = DescribeRedCause(reports[i].redCause);
                     Debug.LogWarning(fitter.forceApplyOutOfRange
-                        ? $"[VRClothDeclipper] {snapshot.renderer.name}: RED ({cause}), but Force Apply (Out of Range) is enabled — applying anyway. Expect artifacts (docs/DESIGN.md §9)."
-                        : $"[VRClothDeclipper] {snapshot.renderer.name}: RED — {cause} Apply will be skipped (docs/DESIGN.md §9). Enable 'Force Apply (Out of Range)' to override.");
+                        ? $"[VRClothDeclipper] {cloth[i].renderer.name}: RED ({cause}), but Force Apply (Out of Range) is enabled — applying anyway. Expect artifacts (docs/DESIGN.md §9)."
+                        : $"[VRClothDeclipper] {cloth[i].renderer.name}: RED — {cause} Apply will be skipped (docs/DESIGN.md §9). Enable 'Force Apply (Out of Range)' to override.");
                 }
             }
 
@@ -106,15 +154,15 @@ namespace VRClothDeclipper
             {
                 for (int i = 0; i < cloth.Count; i++)
                 {
-                    if (verdicts[i] == PreflightVerdict.Red && !fitter.forceApplyOutOfRange)
+                    if (reports[i].verdict == PreflightVerdict.Red && !fitter.forceApplyOutOfRange)
                     {
                         solve.skippedRenderers++;
                         continue;
                     }
                     var snapshot = cloth[i];
                     var result = fitter.useProjectedSolver
-                        ? PenetrationSolver.SolveProjected(snapshot.worldVertices, snapshot.triangles, collider, fitter.margin)
-                        : PenetrationSolver.Solve(snapshot.worldVertices, snapshot.triangles, collider, fitter.margin);
+                        ? PenetrationSolver.SolveProjected(snapshot.worldVertices, snapshot.triangles, pf.collider, fitter.margin)
+                        : PenetrationSolver.Solve(snapshot.worldVertices, snapshot.triangles, pf.collider, fitter.margin);
                     solve.passes = Mathf.Max(solve.passes, result.passes);
                     solve.remainingPenetrating += result.finalHitCount;
                     if (result.initialHitCount > 0)
@@ -133,7 +181,7 @@ namespace VRClothDeclipper
             // and mesh-SDF runs can be compared (docs/DESIGN.md §6). Capsule
             // geometry is still logged; per-capsule attribution is skipped for
             // mesh hits, which carry no capsule index.
-            VRClothRunLog.Write(fitter, cloth, capsules, hits, reports, solve, backend);
+            VRClothRunLog.Write(fitter, cloth, pf.capsules, hits, reports, solve, pf.backend);
             Debug.Log("[VRClothDeclipper] Process complete.");
         }
 
