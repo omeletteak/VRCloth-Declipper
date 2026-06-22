@@ -189,6 +189,36 @@ namespace VRClothDeclipper.Tests
         }
 
         [Test]
+        public void DispersedShallowHighRatio_IsRed_NamedAsThickGarmentInnerWall()
+        {
+            // 8 of 16 vertices penetrate a shallow 6 mm (50% > 30% → Red), but the
+            // triangles split them into four disconnected 2-vertex islands, so the
+            // largest patch is only 12.5%. High ratio + no concentrated patch +
+            // shallow = an enclosing garment's inner wall (§8 false positive), not
+            // a retargeting-class difference. Vertices sit along the capsule axis
+            // so each stays exactly 6 mm deep; connectivity comes only from the
+            // triangles, not proximity.
+            var positions = new Vector3[16];
+            for (int i = 0; i < 8; i++)
+            {
+                positions[i] = new Vector3(0.244f, 0.30f + i * 0.02f, 0f); // 6 mm below the 0.25 surface
+            }
+            for (int i = 8; i < 16; i++)
+            {
+                positions[i] = FarOutside(i);
+            }
+            var triangles = new[] { 0, 1, 8, 2, 3, 9, 4, 5, 10, 6, 7, 11 };
+
+            var report = Evaluate(positions, SingleCapsule(), triangles);
+
+            Assert.AreEqual(PreflightVerdict.Red, report.verdict);
+            Assert.AreEqual(8, report.penetratingCount);
+            Assert.AreEqual(0.5f, report.penetratingRatio, Eps);
+            Assert.AreEqual(2f / 16f, report.largestPatchRatio, Eps, "split into 2-vertex islands");
+            Assert.AreEqual(RedCause.ThickGarmentInnerWall, report.redCause);
+        }
+
+        [Test]
         public void YellowVerdict_CarriesNoRedCause()
         {
             var positions = new Vector3[12];

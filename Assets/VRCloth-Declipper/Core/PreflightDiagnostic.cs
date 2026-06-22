@@ -45,6 +45,17 @@ namespace VRClothDeclipper
         /// blendshape, so the message must say so rather than blame retargeting.
         /// </summary>
         CollapsedShapeKey,
+
+        /// <summary>
+        /// High penetrating ratio but spread across many small patches at shallow
+        /// depth — the signature of a thick/enclosing garment's inner wall or a
+        /// body-hugging accessory (shoes, chokers, belts, frills) whose back faces
+        /// read as body penetration. A known false-positive class
+        /// (docs/DESIGN.md §8): the garment fits, so the action is "verify
+        /// visually", NOT a retargeting job. Only distinguishable when mesh
+        /// connectivity is known (needs the largest-patch signal).
+        /// </summary>
+        ThickGarmentInnerWall,
     }
 
     public struct PreflightReport
@@ -216,11 +227,20 @@ namespace VRClothDeclipper
         }
 
         /// <summary>
-        /// Distinguishes a collapsed shrink/hide blendshape (deep <em>and</em>
-        /// concentrated in one patch) from a genuine retargeting-class misfit.
+        /// Names the root cause of a Red from its numeric signature, so the
+        /// message points at the real fix:
+        /// <list type="bullet">
+        /// <item>deep <em>and</em> concentrated in one patch → a collapsed
+        /// shrink/hide blendshape (neutralize the shape);</item>
+        /// <item>high ratio but spread across many small patches at shallow depth
+        /// → a thick/enclosing garment's inner wall, a §8 false positive (verify
+        /// visually, do not retarget);</item>
+        /// <item>otherwise → a genuine retargeting-class body difference.</item>
+        /// </list>
         /// Patch concentration is measured relative to how much penetrates, so a
         /// small-but-deep folded clump still reads as collapsed even when the
-        /// overall penetrating ratio is modest.
+        /// overall penetrating ratio is modest. The inner-wall case needs mesh
+        /// connectivity, so it only fires when the largest-patch signal exists.
         /// </summary>
         static RedCause ClassifyRedCause(PreflightReport report)
         {
@@ -228,10 +248,22 @@ namespace VRClothDeclipper
             {
                 return RedCause.None;
             }
-            bool deep = report.maxDepth >= CollapseDepth;
             bool clustered = report.penetratingRatio > 0f
                 && report.largestPatchRatio >= report.penetratingRatio * CollapseClusterShare;
-            return deep && clustered ? RedCause.CollapsedShapeKey : RedCause.RetargetingClassDifference;
+            if (report.maxDepth >= CollapseDepth && clustered)
+            {
+                return RedCause.CollapsedShapeKey;
+            }
+            // Dispersed (high ratio, no single concentrated patch) and not a deep
+            // poke: an enclosing garment's inner wall / body-hugging accessory
+            // reading as penetration — a §8 false positive, not a body-shape
+            // difference. Requires connectivity, so only when largestPatchRatio > 0.
+            bool dispersed = report.largestPatchRatio > 0f && !clustered;
+            if (dispersed && report.maxDepth <= RedDepth)
+            {
+                return RedCause.ThickGarmentInnerWall;
+            }
+            return RedCause.RetargetingClassDifference;
         }
 
         static float Percentile95(List<float> depths)

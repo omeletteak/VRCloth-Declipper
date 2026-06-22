@@ -211,6 +211,11 @@ namespace VRClothDeclipper
                 case RedCause.CollapsedShapeKey:
                     return "likely a shrink/hide blendshape folding cloth deep into the body, "
                         + "not a body-shape difference — check this mesh's blendshapes (neutralize the shrink/hide shape).";
+                case RedCause.ThickGarmentInnerWall:
+                    return "high penetration but spread across many small patches at shallow depth — likely "
+                        + "a thick/enclosing garment's inner wall or a body-hugging accessory (shoes, chokers, "
+                        + "belts) reading as penetration, not a body-shape difference. Verify visually; this is "
+                        + "a known false-positive class (docs/DESIGN.md §8), not a retargeting job.";
                 case RedCause.RetargetingClassDifference:
                 default:
                     return "body-shape difference exceeds the supported range (retargeting-class).";
