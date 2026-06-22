@@ -9,7 +9,10 @@ namespace VRClothDeclipper
     /// its triangles are read from the shared mesh; nothing is serialized, so
     /// this stays compatible with No Cache. The body renderer is the one
     /// assigned on the component, otherwise auto-detected the same way radius
-    /// estimation resolves it.
+    /// estimation resolves it. On a split body (body/head/hair as separate
+    /// meshes) this resolves the torso body, not the head — head/face-mounted
+    /// cloth is out of scope by design (docs/DESIGN.md §9), so a green there only
+    /// means "not targeted", not "no penetration". This is intentional, not a bug.
     /// </summary>
     public static class VRClothBodySdfBuilder
     {
