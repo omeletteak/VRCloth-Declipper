@@ -1,38 +1,49 @@
-# TODO — 実機 E2E(Mini Stack × SELESTIA / 「無料で着せられる」マップ)
+# TODO — いま動かす近接タスク
 
-**軸**: 無料の Mini Stack(SEI10, booth.pm/ja/items/8414572)を、**mini stack 非対応 ∩ もちふぃった〜が有料プロファイルのみ**のアバターに着せ、貫通修正で「**有料プロファイル不要・無料で着せられる**」を実証する。
-**第一点**: **SELESTIA**(もちふぃった〜は有料のみ ¥500〜600 / mini stack 非対応 / 人気)。
-**正直な境界**: 体型差が深い(赤)はリターゲ=もちふぃった〜の領域。vrcloth は貫通修正であってフィットではない。
-詳細手順: docs/E2E_TEST_GUIDE.md
+ROADMAP=全体計画、[CHANGELOG](CHANGELOG.md)=出荷履歴、本書=**直近の実行リスト**。
 
-**ワークフロー(既存決定: 手動 prep + ヘッドレス sweep)**
-- A 手動 prep(自分/Unity): 着せ→位置/回転/スケール合わせ→Manual Bake→VRClothDeclipper 付け直し+Mesh SDF ON→保存 → `Assets/TEST_vrcloth_declipper/`
-- B ヘッドレス数値(エージェント): `-vrclothSceneDir -vrclothApply` で緑/黄/赤+残留マップ
-- C 目視確定(自分/Unity): 過膨張・偽RED・肌見せ境界×関節+スクショ
+**現状**: `0.2.0` 出荷（NDMF ビルドパス＋ライブプレビュー＝**VRChat アップロード後も修正が維持**される）。実機 GUI 検証も通過済み。次は **E2E でケースを積む**（`0.3〜`）→ 揃えば `1.0.0`。
 
-## 準備
-- [ ] Mini Stack 入手(無料)。スクショ公開するなら VN3 規約を確認
-- [ ] SELESTIA を手持ちから用意
-- [ ] ヌルテスト用に mini stack 対応アバター1体(Shianao/Airi/Manuka/Chocolat/Chiffon/Plum/Milfy/Eku/Sio/Rurune/Mayo/Kumaly から)
+---
 
-## A 手動 prep(Unity)
-- [ ] ヌルテスト用: mini stack を対応アバターに着せ→Bake→VRClothDeclipper+Mesh SDF ON→保存
-- [ ] SELESTIA: mini stack を着せ→位置/回転/スケール合わせ→Manual Bake→VRClothDeclipper 付け直し+Mesh SDF ON→保存
-- [ ] 両シーンを `Assets/TEST_vrcloth_declipper/` に置いたらエージェントに連絡
+## 1. 完了: `0.2.0` ゲート — NDMF パス＋プレビュー（出荷済み 2026-06-23）
 
-## B ヘッドレス数値(エージェントが回す)
-- [ ] `-vrclothSceneDir -vrclothApply` で一括 before→after。GREEN/YELLOW/RED + 残留を JSON で取得
+- [x] 古い焼き込みを戻す（ビルドの起点を素の cloth に）
+- [x] ライブプレビュー目視（ON で乗り／OFF で戻る＝非破壊で正しく動作）
+- [x] ビルド時適用の確認（Manual bake avatar＝NDMF パス実走→焼かれた cloth が修正済み）
+- [x] Mini Stack × SELESTIA で再確認（プレビュー＋ビルドで通る＝アップロードで戻らない）
+- [x] `git push` → `0.2.0` 確定（package.json version→Release ワークフローでタグ＋VPM 配信）
 
-## C 目視確定(Unity)
-- [ ] ヌルテスト: mesh-SDF で GREEN
-- [ ] SELESTIA: `M=0` / 肌見せ境界×関節(襟元・胸元・スカート裾⇔太もも)に素体が出てないか / 胸尻(Sync 不発)が衣装に収まるか / Before-After スクショ
-- [ ] 緑/黄/赤を記録(=マップの第一点)
+---
 
-## マップ拡張(第一点が取れたら)
-- [ ] 緑〜黄の主役を追加: 有料プロファイルのみ ∩ 体型が mini stack ファミリーに近い体を2〜3
-- [ ] 赤の境界実例を1体: 体型が遠い体(例: Wolferia=無料プロファイルありだが「ここからリターゲ」の正直な端として)
+## 2. いま: E2E 検証マップ（`0.3〜`）
 
-## 記録 = 「無料で着せられる」マップ
-- [ ] 表: アバター / 体型タグ / 判定 / 主要数値 / 回避できた有料プロファイル額
-- [ ] スカートは静止で評価(PhysBone の動的クリッピングはツール対象外)
-- [ ] 「直せてほしいのに赤 / 無理筋なのに緑」は数値を残す(§9 較正)
+**軸**: 公式に Mini Stack 対応していないアバターでも、着せた後に残る貫通を vrcloth で修正して着られる、を実機で実証する。第一点 = **SELESTIA**（Mini Stack 非対応・人気）。
+**正直な境界**: 深い体型差（赤）は体型変換＝変換型ツール一般の領分。vrcloth は**貫通修正であってフィットではない**（[docs/DESIGN.md](docs/DESIGN.md) §9）。手順は [docs/E2E_TEST_GUIDE.md](docs/E2E_TEST_GUIDE.md)。
+
+**ワークフロー（焼き込み廃止後の新版）**
+- A 手動 prep（Unity）: 着せ→位置/回転/スケール合わせ→`VRClothDeclipper` 付与（margin / force / Mesh SDF を設定）→保存。**Manual Bake 不要**（プレビュー＝ビルドが結果を見せる）
+- B ヘッドレス数値（エージェント）: `-vrclothSceneDir -vrclothApply` で緑/黄/赤＋残留を JSON 取得（CLI は計測用に従来 apply を使う＝数値取得はそのまま有効）
+- C 目視確定（Unity）: プレビュー or Manual bake で 過膨張・偽RED・肌見せ境界×関節（襟元・胸元・スカート裾⇔太もも）＋ Before/After スクショ
+
+- [ ] ヌルテスト: Mini Stack 対応アバター1体（Shianao/Airi/Manuka/Chocolat/Chiffon/Plum/Milfy/Eku/Sio/Rurune/Mayo/Kumaly から）で mesh-SDF が GREEN
+- [ ] SELESTIA: `M=0` / 肌見せ境界×関節に素体が出ていないか / 胸尻（Sync 不発）が衣装に収まるか / 緑黄赤を記録（＝マップ第一点）
+- [ ] 緑〜黄の主役を2〜3体追加（体型が Mini Stack ファミリー近傍）
+- [ ] 赤の境界実例を1体（体型が遠い体＝「ここからは体型変換の領分」という正直な端として）
+
+**記録表**: アバター / 体型タグ / 判定 / 主要数値 / 備考
+- スカートは静止で評価（PhysBone の動的クリッピングはツール対象外）
+- 「直せてほしいのに赤 / 無理筋なのに緑」は数値を残す（§9 較正データ）
+- スクショ公開時は Mini Stack と各素体のライセンス条件を確認
+
+---
+
+## 3. `1.0.0` に向けて（earned 1.0 のゲート）
+
+機能完成ではなく「他人が安心して依存できる」証明。フェーズ4-5 は 1.x で非破壊に足せる＝1.0 を待たない。
+
+- [ ] **E2E が n=1 を超えて緑** — 複数の素体×衣装でアップロード後も可視面が破綻しない（本丸の長ポール）
+- [ ] **RED しきい値の較正** — 偽 RED を出しすぎない（Mini Stack×SELESTIA が最初の較正実例。RED→Force Apply で良好＝過保護の証拠）
+- [ ] **§8 内側壁の本対応** — 法線×素体勾配のバックフェース除外で検出から外し、可視外側面で合否（アクセが正しく GREEN に）
+- [ ] **API/UX 安定** — コンポーネント/ワークフローに「次に壊す予定」が無い状態
+- [ ] 上が揃ったら `1.0.0`

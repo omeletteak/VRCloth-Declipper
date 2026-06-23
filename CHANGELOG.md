@@ -6,7 +6,9 @@
 
 ## [Unreleased]
 
-> 実機 GUI 検証(① シーンビューでのプレビュー目視 ② ローカルビルドでアップロード後もメッシュが修正済みか)が通り次第、`0.2.0` として確定します。
+## [0.2.0] - 2026-06-23
+
+実機 GUI 検証(シーンビューでのライブプレビュー目視・ローカルビルドでアップロード後もメッシュが修正済みであること)を確認して確定。
 
 ### Added
 - **NDMF ビルドパス化** — フィットをビルド時(Modular Avatar の Merge Armature 後)にアバターへ適用するようになり、**VRChat アップロード後も修正が維持される**ように。従来は編集時のシーン焼き込みのみで、アップロード時に修正前へ戻っていた(コンポーネントが `IEditorOnly` でビルド時にストリップされ、ビルドパスが存在しなかったため)。`VRClothDeclipperPass` / `VRClothDeclipperNdmfPlugin`(`Transforming.AfterPlugin("nadena.dev.modular-avatar")`)
@@ -16,6 +18,8 @@
 
 ### Changed
 - エディタの「Run Fitting」(シーンへ焼き込み)を「**Run Preflight**」(診断のみ)へ再定義。フィットはライブプレビューとビルドパスで自動適用されるため、シーンには何も焼かない
+- シーンギズモ(プロキシカプセル・貫通頂点)を**既定で非表示**に。描画が重く、シーンを開くたびに出ていたのを解消(インスペクタの「Show Scene Gizmos」で表示)
+- インスペクタのタイトル表示を「VRCloth Declipper」に統一(旧「VRCloth Fitter」を解消)
 
 ## [0.1.0] - 2026-06-18
 
@@ -28,5 +32,6 @@
 - **カプセル半径の素体推定** — 素体メッシュからカプセル半径をパーセンタイル推定
 - **配布** — VPM パッケージ化(`IEditorOnly`)、リリース自動化(GitHub Actions)、VPM listing 配信
 
-[Unreleased]: https://github.com/omeletteak/VRCloth-Declipper/compare/0.1.0...HEAD
+[Unreleased]: https://github.com/omeletteak/VRCloth-Declipper/compare/0.2.0...HEAD
+[0.2.0]: https://github.com/omeletteak/VRCloth-Declipper/compare/0.1.0...0.2.0
 [0.1.0]: https://github.com/omeletteak/VRCloth-Declipper/releases/tag/0.1.0
