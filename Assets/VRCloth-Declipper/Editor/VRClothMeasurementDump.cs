@@ -58,8 +58,9 @@ namespace VRClothDeclipper
             capsules = outcome.capsules;
             float coverage = BodyModelConfidence.Coverage(outcome.estimated);
             VRClothHeadCountMeasure.Result hc = VRClothHeadCountMeasure.Compute(fitter);
+            string meshHash = ComputeBodyHash(outcome.bodyMeshes);
 
-            var dto = BuildDto(fitter, capsules, outcome, coverage, hc);
+            var dto = BuildDto(fitter, capsules, outcome, coverage, hc, meshHash);
             Debug.Log($"[VRClothDeclipper] 採寸 '{dto.avatar}': "
                 + $"head-count {dto.headCount_neckRef:F2} (Neck) / {dto.headCount_headRef:F2} (Head), "
                 + $"height {dto.height_m:F3} m, {dto.capsuleCount} capsules, coverage {coverage:P0}.");
@@ -89,12 +90,33 @@ namespace VRClothDeclipper
             }
         }
 
+        /// <summary>
+        /// Version key of the measured body (docs/MEASUREMENT_SPEC.md §6): the
+        /// order-independent combination of each body-part mesh's content hash.
+        /// Uses bind-pose <c>sharedMesh</c> so it is stable across scene pose/scale.
+        /// </summary>
+        static string ComputeBodyHash(List<SkinnedMeshRenderer> bodies)
+        {
+            if (bodies == null || bodies.Count == 0)
+            {
+                return "";
+            }
+            var hashes = new List<string>(bodies.Count);
+            foreach (var b in bodies)
+            {
+                if (b == null || b.sharedMesh == null) continue;
+                hashes.Add(MeshFingerprint.Compute(b.sharedMesh.vertices, b.sharedMesh.triangles));
+            }
+            return MeshFingerprint.Combine(hashes);
+        }
+
         static MeasurementDto BuildDto(
             VRClothDeclipper fitter,
             IReadOnlyList<BodyCapsule> capsules,
             VRClothBodyRadiusEstimator.Outcome outcome,
             float coverage,
-            VRClothHeadCountMeasure.Result hc)
+            VRClothHeadCountMeasure.Result hc,
+            string meshHash)
         {
             int n = capsules != null ? capsules.Count : 0;
             var capDtos = new CapsuleMeasureDto[n];
@@ -119,6 +141,11 @@ namespace VRClothDeclipper
                 headCount_headRef = hc.hasHead ? hc.headRef.headCount : 0f,
                 height_m = hc.ok ? hc.Height : 0f,
                 bodyCoverage = coverage,
+                meshHash = meshHash,
+                conditions = new MeasurementConditions
+                {
+                    radiusPercentile = fitter.radiusPercentile,
+                },
                 capsuleCount = n,
                 capsules = capDtos,
             };
@@ -127,7 +154,7 @@ namespace VRClothDeclipper
         [Serializable]
         class MeasurementDto
         {
-            public string schema = "vrcloth-body-measurement/1";
+            public string schema = "vrcloth-body-measurement/2";
             public string timestamp;
             public string avatar;
 
@@ -140,8 +167,31 @@ namespace VRClothDeclipper
 
             /// <summary>Fraction of capsules measured from the body; low = an incomplete body model (docs/DIAGNOSTIC_HONESTY.md §1).</summary>
             public float bodyCoverage;
+
+            /// <summary>
+            /// Version key of the measured body asset (docs/MEASUREMENT_SPEC.md §6,
+            /// schema /2): SHA-256 over the quantized body meshes. Provenance only —
+            /// "same exact asset", not "same avatar" across users. Empty when no
+            /// body mesh was found.
+            /// </summary>
+            public string meshHash;
+
+            /// <summary>Measurement conditions, paired with the hash to reproduce the result (§6).</summary>
+            public MeasurementConditions conditions;
             public int capsuleCount;
             public CapsuleMeasureDto[] capsules;
+        }
+
+        /// <summary>
+        /// The measurement's conditions snapshot (docs/MEASUREMENT_SPEC.md §6).
+        /// v1 records the radius percentile (the one parameter that shapes the
+        /// numbers); pose, shape-key state, scale and tool/threshold versions are
+        /// 保留 — see the §6 "v1 と保留" note.
+        /// </summary>
+        [Serializable]
+        class MeasurementConditions
+        {
+            public float radiusPercentile;
         }
 
         [Serializable]
