@@ -33,23 +33,25 @@ namespace VRClothDeclipper
         }
 
         /// <summary>
-        /// Measures the fitter's target avatar and appends one JSONL row to
-        /// <see cref="FileName"/>. Logs a summary either way; returns silently
-        /// after logging when the avatar can't be measured.
+        /// Measures the fitter's target avatar and returns one JSONL row (no disk
+        /// write), logging a per-avatar summary. Returns null after logging when
+        /// the avatar can't be measured. Shared by the inspector button
+        /// (<see cref="Dump"/>) and the headless CLI
+        /// (<see cref="VRClothMeasureCli"/>).
         /// </summary>
-        public static void Dump(VRClothDeclipper fitter)
+        public static string Measure(VRClothDeclipper fitter)
         {
             if (fitter == null || fitter.targetAvatar == null)
             {
                 Debug.LogWarning("[VRClothDeclipper] 採寸: assign a Target Avatar first.");
-                return;
+                return null;
             }
 
             List<BodyCapsule> capsules = VRClothProxyGenerator.Generate(fitter.targetAvatar);
             if (capsules == null || capsules.Count == 0)
             {
                 Debug.LogWarning("[VRClothDeclipper] 採寸: could not generate proxy capsules (target avatar must be Humanoid).");
-                return;
+                return null;
             }
 
             VRClothBodyRadiusEstimator.Outcome outcome = VRClothBodyRadiusEstimator.Apply(fitter, capsules);
@@ -58,14 +60,28 @@ namespace VRClothDeclipper
             VRClothHeadCountMeasure.Result hc = VRClothHeadCountMeasure.Compute(fitter);
 
             var dto = BuildDto(fitter, capsules, outcome, coverage, hc);
+            Debug.Log($"[VRClothDeclipper] 採寸 '{dto.avatar}': "
+                + $"head-count {dto.headCount_neckRef:F2} (Neck) / {dto.headCount_headRef:F2} (Head), "
+                + $"height {dto.height_m:F3} m, {dto.capsuleCount} capsules, coverage {coverage:P0}.");
+            return JsonUtility.ToJson(dto, false);
+        }
+
+        /// <summary>
+        /// Measures the fitter's target avatar and appends one JSONL row to
+        /// <see cref="FileName"/> (the incremental, button-driven path).
+        /// </summary>
+        public static void Dump(VRClothDeclipper fitter)
+        {
+            string json = Measure(fitter);
+            if (json == null)
+            {
+                return;
+            }
             try
             {
-                string json = JsonUtility.ToJson(dto, false);
                 string path = FilePath();
                 File.AppendAllText(path, json + "\n");
-                Debug.Log($"[VRClothDeclipper] 採寸 appended for '{dto.avatar}': "
-                    + $"head-count {dto.headCount_neckRef:F2} (Neck) / {dto.headCount_headRef:F2} (Head), "
-                    + $"height {dto.height_m:F3} m, {dto.capsuleCount} capsules, coverage {coverage:P0}. -> {path}");
+                Debug.Log($"[VRClothDeclipper] 採寸 appended -> {path}");
             }
             catch (Exception e)
             {
