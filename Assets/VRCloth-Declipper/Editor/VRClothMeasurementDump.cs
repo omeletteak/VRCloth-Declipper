@@ -251,13 +251,13 @@ namespace VRClothDeclipper
         /// <summary>
         /// Re-binds each garment renderer's bones onto the body skeleton — the core of
         /// MA Merge Armature, applied only to align the garment meshes with the body
-        /// capsules for measurement (docs/MEASUREMENT_SPEC.md §4). Two passes per bone:
-        /// (1) exact same-name match (e.g. "Spine"→"Spine"); (2) when the garment uses
-        /// a different bone-naming convention than the body (e.g. the garment's "Foot_L"
-        /// vs the body's FBX name), the nearest body bone by world position — valid
-        /// because the garment is co-located on the body, so each garment bone sits on
-        /// its body counterpart. Bones with neither a name match nor a body bone within
-        /// <see cref="MaxBoneSnap"/> keep their original (garment-only accessories).
+        /// capsules for measurement (docs/MEASUREMENT_SPEC.md §4). Three passes per bone:
+        /// (1) exact same-name; (2) <see cref="BoneNameThesaurus"/> → Humanoid bone →
+        /// the body's actual bone via <c>Animator.GetBoneTransform</c> (handles a garment
+        /// and body that use different naming conventions, e.g. "Foot_L" vs the body's
+        /// own name — this is what MA's HeuristicBoneMapper does); (3) nearest body bone
+        /// by world position (garment is co-located on the body), covering accessories
+        /// and fingers not in the thesaurus. Bones matching none keep their original.
         /// Returns the count re-bound; <paramref name="totalBones"/> is the total seen.
         /// Mutates the passed renderers — callers back up/restore for non-destructive use.
         /// </summary>
@@ -271,6 +271,11 @@ namespace VRClothDeclipper
                 return remapped;
             }
             Transform[] bodyBones = bodyAvatar.GetComponentsInChildren<Transform>(true);
+            Animator avatarAnimator = bodyAvatar.GetComponentInChildren<Animator>();
+            if (avatarAnimator != null && !avatarAnimator.isHuman)
+            {
+                avatarAnimator = null; // the thesaurus pass needs a Humanoid Animator
+            }
             var byName = new Dictionary<string, Transform>();
             foreach (Transform t in bodyBones)
             {
@@ -290,34 +295,49 @@ namespace VRClothDeclipper
                 for (int i = 0; i < src.Length; i++)
                 {
                     totalBones++;
-                    dst[i] = ResolveBodyBone(src[i], byName, bodyBones, ref remapped);
+                    dst[i] = ResolveBodyBone(src[i], byName, bodyBones, avatarAnimator, ref remapped);
                 }
                 smr.bones = dst;
                 if (smr.rootBone != null)
                 {
                     int ignore = 0;
-                    smr.rootBone = ResolveBodyBone(smr.rootBone, byName, bodyBones, ref ignore);
+                    smr.rootBone = ResolveBodyBone(smr.rootBone, byName, bodyBones, avatarAnimator, ref ignore);
                 }
             }
             return remapped;
         }
 
-        /// <summary>Resolves one garment bone to a body bone: exact name first, then
-        /// nearest body bone by world position (within <see cref="MaxBoneSnap"/>);
-        /// otherwise the garment bone is kept. Increments <paramref name="remapped"/>
-        /// when re-bound.</summary>
+        /// <summary>Resolves one garment bone to a body bone in three passes: exact
+        /// name, then <see cref="BoneNameThesaurus"/>→Humanoid→body bone, then nearest
+        /// by world position (within <see cref="MaxBoneSnap"/>); otherwise the garment
+        /// bone is kept. Increments <paramref name="remapped"/> when re-bound.</summary>
         static Transform ResolveBodyBone(
-            Transform garmentBone, Dictionary<string, Transform> byName, Transform[] bodyBones, ref int remapped)
+            Transform garmentBone, Dictionary<string, Transform> byName, Transform[] bodyBones,
+            Animator avatarAnimator, ref int remapped)
         {
             if (garmentBone == null)
             {
                 return null;
             }
+            // (1) exact same-name match.
             if (byName.TryGetValue(garmentBone.name, out Transform named))
             {
                 remapped++;
                 return named;
             }
+            // (2) name thesaurus → Humanoid bone → the body's actual bone, regardless of
+            // the body's naming (garment "Foot_L" → LeftFoot → body's real foot bone).
+            if (avatarAnimator != null && BoneNameThesaurus.TryResolve(garmentBone.name, out HumanBodyBones hb))
+            {
+                Transform bodyBone = avatarAnimator.GetBoneTransform(hb);
+                if (bodyBone != null)
+                {
+                    remapped++;
+                    return bodyBone;
+                }
+            }
+            // (3) nearest body bone by world position (garment co-located on the body;
+            // covers accessories/fingers not in the thesaurus).
             Transform best = null;
             float bestSq = MaxBoneSnap * MaxBoneSnap;
             Vector3 p = garmentBone.position;
