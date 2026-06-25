@@ -96,3 +96,7 @@ crash.log
 # Unity editor log accidentally committed at the root
 /Editor.log
 /vrcloth-scatter.svg
+
+# Python tooling artifacts (tools/*.py)
+__pycache__/
+*.pyc
