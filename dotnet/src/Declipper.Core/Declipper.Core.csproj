@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- netstandard2.1 / C# 9 が Unity 2022.3 と source-share 可能な上限
+       (docs/REARCHITECTURE.md §2 柱1)。ここを上げると S2 の Unity 側
+       コンパイルが通らなくなるので変更しないこと。 -->
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <LangVersion>9.0</LangVersion>
+    <Nullable>enable</Nullable>
+    <RootNamespace>Declipper.Core</RootNamespace>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <!-- CS1591(公開メンバの XML doc 欠落)は契約 doc の網羅を強制しない -->
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+  </PropertyGroup>
+
+</Project>

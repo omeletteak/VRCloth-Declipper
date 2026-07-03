@@ -100,3 +100,10 @@ crash.log
 # Python tooling artifacts (tools/*.py)
 __pycache__/
 *.pyc
+
+# v2 pure .NET core (dotnet/) build artifacts
+dotnet/**/bin/
+dotnet/**/obj/
+# but the v2 core projects are real sources, not Unity-generated
+!dotnet/**/*.csproj
+!dotnet/*.sln

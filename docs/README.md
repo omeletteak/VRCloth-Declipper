@@ -18,6 +18,7 @@ VRCloth-Declipper は「**着せた後に残る貫通の自動修正**」に特�
 | ドキュメント | 状態 | 概要 |
 |---|---|---|
 | [DESIGN.md](DESIGN.md) | 決定 | 本体。目的(オープン実装の存在)、解く問題、競合分析、変換プロファイルのプライバシー所見、No Cache 原則、パイプライン構成、配布形態、凍結した構想、**サポート範囲の定量定義(§9: 緑/黄/赤)** |
+| [REARCHITECTURE.md](REARCHITECTURE.md) | 決定 | **v2 再設計(2026-07-03)**。4本柱(純 .NET コア/SDF 単一体表現/制約付き最適化ソルバ一本化/体表面対応 binding)、v1 から維持するもの、段階移行計画(S0〜S3)。実装スケルトンは [`dotnet/`](../dotnet/README.md) |
 | [ECOSYSTEM_VISION.md](ECOSYSTEM_VISION.md) | 構想 | プリフライト診断を個人ツールからエコシステムの互換性標準へ育てる構想。三層構造、買い手の3チャネル、ショップのサイズタイリング、採寸表、Fit Report、NDMF パス化、普及の階段 |
 | [INFORMATION_ARCHITECTURE.md](INFORMATION_ARCHITECTURE.md) | 構想 | 何を運び、何を運ばないかの原則。変換型と判定型の情報要求量の違い、現実のアパレルの先例、サポート範囲(§9)と情報境界の同一性、スケール則 |
 | [DEFORMATION_METHODS.md](DEFORMATION_METHODS.md) | 構想 | ソルバの発展候補比較(変位場の調和補間、XPBD、ARAP、RBF 空間場)と適用範囲の考え方 |
@@ -41,7 +42,7 @@ VRCloth-Declipper は「**着せた後に残る貫通の自動修正**」に特�
 ## 読み順の推奨
 
 - **はじめて**: 上の「1分で全体像」→ DESIGN.md §1〜§2・§9 → ROADMAP
-- **設計に興味**: DESIGN.md 通読 → DEFORMATION_METHODS.md → FAMILY_MODEL.md → DIAGNOSTIC_HONESTY.md → CORRECTABILITY_FIELD.md → DETECTION_SEMANTICS.md
+- **設計に興味**: DESIGN.md 通読 → REARCHITECTURE.md → DEFORMATION_METHODS.md → FAMILY_MODEL.md → DIAGNOSTIC_HONESTY.md → CORRECTABILITY_FIELD.md → DETECTION_SEMANTICS.md
 - **構想に興味**: INFORMATION_ARCHITECTURE.md → ECOSYSTEM_VISION.md → SHARING_PROTOCOL.md → FAMILY_MODEL.md
 - **テストする**: **E2E_TODO.md(次にやることが分かる)** → E2E_TEST_GUIDE.md(手順の詳細)
 

@@ -44,9 +44,21 @@ Unity 2022.3.22f1 の EditMode テストをバッチモードで実行する(Uni
 
 実機での目視 E2E テストの手順は [docs/E2E_TEST_GUIDE.md](docs/E2E_TEST_GUIDE.md)(ユーザーが GUI で実施。エージェントは実行できない)。
 
+### v2 純 .NET コア(`dotnet/`)
+
+v2 再設計([docs/REARCHITECTURE.md](docs/REARCHITECTURE.md))の UnityEngine 非依存コアは Unity 不要でテストできる:
+
+```bash
+cd dotnet && dotnet test
+```
+
+- dotnet SDK 8.0 が必要(未導入なら `curl -sSL https://dot.net/v1/dotnet-install.sh | bash /dev/stdin --channel 8.0`、`~/.dotnet` を PATH へ)
+- 制約: `src/Declipper.Core` は **`netstandard2.1` / C# 9 を超えない**(Unity 2022.3 と将来 source-share するため)
+- 実装状態と S1 の移植順は [dotnet/README.md](dotnet/README.md)
+
 ## Architecture Overview
 
-VRChat アバター衣装の貫通自動修正を行う Unity エディタ拡張。4アセンブリ構成(すべて `Assets/VRCloth-Declipper/` 配下):
+VRChat アバター衣装の貫通自動修正を行う Unity エディタ拡張。**現在 v2 再設計への段階移行中**([docs/REARCHITECTURE.md](docs/REARCHITECTURE.md)、幾何コアの新規実装は `dotnet/` 側で行う)だが、以下の v1 構成が現行の動作系。4アセンブリ構成(すべて `Assets/VRCloth-Declipper/` 配下):
 
 - **Core**(`VRClothDeclipper.Core`)— エディタ非依存の幾何計算。カプセル距離・貫通検出・押し出し・Laplacian 平滑化・スキニング数学(`SkinningMath`)
 - **Runtime**(`VRClothDeclipper.Runtime`)— シーンに置く `VRClothDeclipper` コンポーネント(設定の入れ物)のみ
