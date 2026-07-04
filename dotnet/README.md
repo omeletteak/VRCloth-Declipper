@@ -2,19 +2,39 @@
 
 v2 再設計([docs/REARCHITECTURE.md](../docs/REARCHITECTURE.md))の柱1「UnityEngine 完全非依存の幾何コア」の実装場所。数学は `System.Numerics.Vector3`、テストは `dotnet test` で秒単位に回る。Unity 側は将来(S2)このソースを共有コンパイルするため、**`netstandard2.1` / C# 9 を超える言語機能・API は使わないこと**(Unity 2022.3 互換の上限)。
 
-## 状態(2026-07-03, S0 スケルトン)
+## 状態(2026-07-04, S1 移植完了・ゴールデン検証残)
 
-**このスケルトンはまだ一度もビルドされていない**(作成マシンに dotnet SDK が無かった)。着手時の最初の作業は SDK 導入と `dotnet test` の通過確認:
+スタブは全て実装済み。`dotnet test` は **24件緑・秒未満**(dotnet SDK 9.0 で検証、`src` は `netstandard2.1`/C# 9 を維持):
 
 ```bash
-# SDK が無ければ(root 不要、~/.dotnet へ):
-curl -sSL https://dot.net/v1/dotnet-install.sh | bash /dev/stdin --channel 8.0
-export PATH="$HOME/.dotnet:$PATH"
-
 cd dotnet && dotnet test
 ```
 
-期待: `CapsuleSdfTests` 5件が緑(実装済み部分)、スタブはテスト対象外。コンパイルエラーがあればまず直すこと(スケルトンの契約 doc は正、シグネチャの些細な修正は可)。
+移植済み(構成的/解析的ユニットテストで固定 — 純組合せ・ベクトル論理は v1 golden より厳密):
+
+| ピース | 移植元 | テスト観点 |
+|---|---|---|
+| `Solver/PenetrationDetection` | 同名 v1 | 検出深度・入力順(SDF 単一経路) |
+| `Solver/VertexAdjacency` | 同名 v1 | 溶接トポロジ併合・近傍 |
+| `Solver/LaplacianSmoothing` | 同名 v1 | リング成長・クローン書戻し |
+| `Solver/ProjectedSolver` | `PenetrationSolver.SolveProjected` | 不変条件 finalHitCount==0 |
+| `Sdf/MeshSdf` | `MeshSdfCollider` | 加速版 vs ブルートフォース一致・符号・勾配 |
+| `Diagnostics/PreflightDiagnostic` | 同名 v1 | Green/Collapsed/Retargeting/InnerWall 分類 |
+| `Surface/CapsuleSurface` | 新規(v1 対応物なし) | round-trip 恒等(body＋caps＋球)・margin クランプ |
+
+### 保留(parked) — ゴールデンフィクスチャ基盤
+
+S1 実装順の step 1(下記)は**未着手**。要 Unity バッチダンプで、エージェント単独では回しにくいため保留。用途は (a) FP 重量級(`MeshSdf`・ソルバ全経路)の v1 数値一致検証、(b) **S2 で v1 を置換する際のゲート**(§4「ゴールデンテストが通るまで v1 を消さない」)。純組合せ部分は解析テストで代替済みなので、この基盤が無くても S2 の設計検討には入れる。
+
+- v1(Unity)から代表入力の検出結果・ソルブ後頂点・プリフライト統計を JSON ダンプするユーティリティを書き `tests/fixtures/` に固定
+- **入力の権利制約**: public repo にコミットされるため、入力メッシュは**合成(プロシージャル)または再配布自由な基準マネキン限定**。購入アセット由来の頂点(ソルブ後の衣装形状含む)は No Cache・再配布禁止の両方に抵触するのでコミットしない
+
+### 移植時の設計判断・妥協点(記録)
+
+- **nullable-as-error**: `src` は `TreatWarningsAsErrors`+`Nullable enable`。v1 の防御的 null ガードは CS8602 で落ちるため、`?` アノテーション＋早期 return へ整形した(挙動は不変)。
+- **`RedCause.None` 復活**: v2 スタブ enum は None を落としていたが、`PreflightReport` は常に `RedCause` フィールドを持つため非Red時のセンチネルが必要。v1 準拠で None をゼロ値に戻した。
+- **`MeshSdf` の一件メモ削除**: v1 は距離/勾配を別クエリ＋一件メモで返したが、v2 契約は距離+勾配一括の `Sample`。メモはステートフルで並列化(§2 柱1)を阻むため削除しステートレス化。Scan→PushOut 間の再計算最適化が要れば別途スレッドセーフな形で。
+- **`CapsuleSurface.Coordinates=(t,na,θ)`**: スタブは "(t, azimuth, unused)" と例示したが、(t,azimuth) の2自由度では半球キャップを表現できず round-trip がキャップで破綻する。na(法線の軸成分)を "unused" 枠に充ててキャップ含め厳密恒等化した(妥協でなく厳密化)。
 
 ## レイアウト
 
