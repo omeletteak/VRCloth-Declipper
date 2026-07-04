@@ -31,9 +31,14 @@ v1↔v2 等価ゲートが稼働(§4「ゴールデンテストが通るまで v
   Unity.exe -batchmode -quit -projectPath <repo> \
     -executeMethod VRClothDeclipper.GoldenFixtures.GoldenFixtureDumper.DumpAll
   ```
-- fixtures(`dotnet/tests/fixtures/*.json`): capsule 系3件(`tube_over_capsule`/`sheet_over_sphere`/`two_spheres`, 検出+ソルブ+プリフライト)＋mesh SDF 1件(`meshsdf_sphere`, 216 プローブの符号付き距離)。照合は `GoldenTests.cs`
+- fixtures(`dotnet/tests/fixtures/*.json`):
+  - capsule 系3件(`tube_over_capsule`/`sheet_over_sphere`/`two_spheres`)— 検出+ソルブ+プリフライトを厳密照合
+  - `meshsdf_sphere` — 216 プローブで MeshSdf の符号付き距離(厳密)＋勾配(統計的、下記)
+  - `meshsolve_shell_in_sphere` — mesh SDF ボディでの full-solve(同心シェル cloth・315頂点)
+  - 照合は `GoldenTests.cs`
 - **入力の権利制約**: 入力は 100% 手続き生成(購入・アバター由来ゼロ)なので入出力とも public repo に commit 可 — No Cache・再配布禁止の両方を満たす
-- **残(小)**: capsule 系はソルブ後頂点まで golden 化済み、mesh SDF は距離のみ(勾配・mesh ボディでのフルソルブ golden は未)。基準マネキン(ROADMAP フェーズ5)を使った E2E 近似 fixture も将来足せる
+- **mesh SDF の条件付けに関する知見**: 低ポリ mesh SDF の**スカラー距離場は v1↔v2 で厳密再現**(1e-4)だが、**勾配はファセット境界で不連続**で、v1(Mono)/v2(.NET) が最近接ファセットのタイブレークを float 精度で別々に解決するため境界近傍で最大 面角度ぶんずれる。ゆえに勾配は統計的に検証(遠方プローブの大多数が厳密一致・符号反転ゼロ)、full-solve は良条件な cloth(面追従シェル・各頂点が1ファセットに明確最近接)を使い 315頂点/8反復で 1e-7 のほぼビット一致を確認。中心付近に置いた cloth は全ファセット等距離で縮退する(移植バグでなく ill-conditioned 入力)
+- **残(小)**: 基準マネキン(ROADMAP フェーズ5)を使った E2E 近似 fixture は将来足せる
 
 ### 移植時の設計判断・妥協点(記録)
 
