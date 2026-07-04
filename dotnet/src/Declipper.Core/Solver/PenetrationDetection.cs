@@ -21,22 +21,39 @@ namespace Declipper.Core.Solver
     }
 
     /// <summary>
-    /// STUB — S1 port target (trivial). Single detection path for every
-    /// backend; the v1 capsule-specific Detect overload does not carry over
-    /// (docs/REARCHITECTURE.md §1 動機2).
-    /// Port from Assets/VRCloth-Declipper/Core/PenetrationDetection.cs.
+    /// Single detection path for every backend; the v1 capsule-specific Detect
+    /// overload (which carried a closest-capsule index) does not carry over —
+    /// representation-specific metadata is an SDF implementation concern, not
+    /// part of the contract (docs/REARCHITECTURE.md §1 動機2).
+    /// Ported from Assets/VRCloth-Declipper/Core/PenetrationDetection.cs.
     /// </summary>
     public static class PenetrationDetection
     {
         /// <summary>
-        /// Every vertex with signed distance below <paramref name="margin"/>.
-        /// Embarrassingly parallel over vertices — keep the loop flat so a
+        /// Every vertex with signed distance below <paramref name="margin"/>,
+        /// in input order. Depth is the distance below the margin surface
+        /// (<c>margin - signedDistance</c>, always positive for a hit).
+        /// Embarrassingly parallel over vertices — the loop is kept flat so a
         /// parallel-for (and later Unity Jobs) drops in without reshaping.
         /// </summary>
         public static List<PenetrationHit> Scan(
             ReadOnlySpan<Vector3> positions, ISignedDistanceField body, float margin)
         {
-            throw new NotImplementedException("S1: port PenetrationDetection.Scan.");
+            var hits = new List<PenetrationHit>();
+            if (body == null)
+            {
+                return hits;
+            }
+
+            for (int v = 0; v < positions.Length; v++)
+            {
+                float distance = body.Sample(positions[v]).Distance;
+                if (distance < margin)
+                {
+                    hits.Add(new PenetrationHit(v, margin - distance));
+                }
+            }
+            return hits;
         }
     }
 }

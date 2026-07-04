@@ -1,26 +1,109 @@
-using System;
+using System.Collections.Generic;
 using System.Numerics;
 
 namespace Declipper.Core.Solver
 {
     /// <summary>
-    /// STUB — S1 port target. Vertex neighborhood over the triangle topology,
-    /// with coincident vertices (UV/normal seam duplicates) welded by position
-    /// so smoothing does not tear seams.
-    /// Port from Assets/VRCloth-Declipper/Core/VertexAdjacency.cs, keeping its
-    /// welding semantics exactly (golden-test on a seamed fixture mesh).
+    /// Vertex neighbor map built from a triangle list. Vertices that share a
+    /// position (meshes duplicate vertices along UV/normal seams) are welded
+    /// into one cluster, so smoothing moves the clones together instead of
+    /// tearing the mesh open along seams.
+    ///
+    /// Faithful port of v1 <c>VRClothDeclipper.VertexAdjacency</c> — the
+    /// representative / members / neighbors trichotomy is preserved verbatim
+    /// (the skeleton's single <c>Neighbors</c> accessor could not express the
+    /// welding semantics <see cref="LaplacianSmoothing"/> depends on).
     /// </summary>
     public sealed class VertexAdjacency
     {
-        /// <summary>Neighbor vertex indices of <paramref name="vertex"/>.</summary>
-        public ReadOnlySpan<int> Neighbors(int vertex)
+        readonly int[] representatives;
+        readonly Dictionary<int, List<int>> members;
+        readonly Dictionary<int, List<int>> neighbors;
+
+        static readonly List<int> Empty = new List<int>();
+
+        VertexAdjacency(int[] representatives, Dictionary<int, List<int>> members, Dictionary<int, List<int>> neighbors)
         {
-            throw new NotImplementedException("S1: port VertexAdjacency.");
+            this.representatives = representatives;
+            this.members = members;
+            this.neighbors = neighbors;
         }
 
-        public static VertexAdjacency Build(Vector3[] positions, int[] triangles)
+        public int VertexCount => representatives.Length;
+
+        /// <summary>The welded cluster this vertex belongs to.</summary>
+        public int RepresentativeOf(int vertex) => representatives[vertex];
+
+        /// <summary>All vertices sharing the representative's position (itself included).</summary>
+        public IReadOnlyList<int> MembersOf(int representative) =>
+            members.TryGetValue(representative, out var list) ? list : Empty;
+
+        /// <summary>Neighboring clusters (as representatives) connected by a triangle edge.</summary>
+        public IReadOnlyList<int> NeighborsOf(int representative) =>
+            neighbors.TryGetValue(representative, out var list) ? list : Empty;
+
+        public static VertexAdjacency Build(IReadOnlyList<Vector3>? positions, int[]? triangles)
         {
-            throw new NotImplementedException("S1: port VertexAdjacency.");
+            if (positions == null || positions.Count == 0)
+            {
+                return new VertexAdjacency(
+                    new int[0], new Dictionary<int, List<int>>(), new Dictionary<int, List<int>>());
+            }
+
+            int count = positions.Count;
+            var representatives = new int[count];
+            var firstAtPosition = new Dictionary<Vector3, int>(count);
+            var members = new Dictionary<int, List<int>>();
+
+            for (int v = 0; v < count; v++)
+            {
+                if (!firstAtPosition.TryGetValue(positions[v], out int rep))
+                {
+                    rep = v;
+                    firstAtPosition.Add(positions[v], rep);
+                    members.Add(rep, new List<int>());
+                }
+                representatives[v] = rep;
+                members[rep].Add(v);
+            }
+
+            var neighborSets = new Dictionary<int, HashSet<int>>();
+            void Connect(int a, int b)
+            {
+                int ra = representatives[a];
+                int rb = representatives[b];
+                if (ra == rb)
+                {
+                    return;
+                }
+                if (!neighborSets.TryGetValue(ra, out var setA))
+                {
+                    neighborSets.Add(ra, setA = new HashSet<int>());
+                }
+                if (!neighborSets.TryGetValue(rb, out var setB))
+                {
+                    neighborSets.Add(rb, setB = new HashSet<int>());
+                }
+                setA.Add(rb);
+                setB.Add(ra);
+            }
+
+            if (triangles != null)
+            {
+                for (int t = 0; t + 2 < triangles.Length; t += 3)
+                {
+                    Connect(triangles[t], triangles[t + 1]);
+                    Connect(triangles[t + 1], triangles[t + 2]);
+                    Connect(triangles[t + 2], triangles[t]);
+                }
+            }
+
+            var neighbors = new Dictionary<int, List<int>>(neighborSets.Count);
+            foreach (var pair in neighborSets)
+            {
+                neighbors.Add(pair.Key, new List<int>(pair.Value));
+            }
+            return new VertexAdjacency(representatives, members, neighbors);
         }
     }
 }
