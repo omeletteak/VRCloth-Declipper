@@ -1,4 +1,4 @@
-using System;
+using System.Collections.Generic;
 using System.Numerics;
 using Declipper.Core.Sdf;
 
@@ -76,10 +76,102 @@ namespace Declipper.Core.Solver
     /// </summary>
     public static class ProjectedSolver
     {
+        /// <summary>Small tolerance below the margin surface for the final residual count.</summary>
+        const float FinalResidualTolerance = 1e-4f;
+
         public static SolveResult Solve(
             Vector3[] positions, int[] triangles, ISignedDistanceField body, in SolverOptions options)
         {
-            throw new NotImplementedException("S1: port PenetrationSolver.SolveProjected.");
+            if (positions == null || positions.Length == 0 || body == null)
+            {
+                return new SolveResult(0, 0, 0);
+            }
+
+            float margin = options.Margin;
+            var hits = PenetrationDetection.Scan(positions, body, margin);
+            int initialHitCount = hits.Count;
+            if (initialHitCount == 0)
+            {
+                return new SolveResult(0, 0, 0);
+            }
+
+            // `positions` becomes the scratch buffer for original + displacement;
+            // the untouched clone is the reference the field is measured against.
+            var originals = (Vector3[])positions.Clone();
+            var displacements = new Vector3[originals.Length];
+            var adjacency = VertexAdjacency.Build(originals, triangles);
+            var seeds = new HashSet<int>();
+
+            // Start the field on the margin surface, then grow the smoothing
+            // region around the initial hits.
+            ApplyPushOut(originals, displacements, hits, body, margin);
+            AddSeeds(seeds, hits);
+            var region = LaplacianSmoothing.ExpandRegion(adjacency, seeds, options.Rings);
+
+            int passes = 0;
+            for (int i = 0; i < options.Iterations; i++)
+            {
+                passes++;
+                // One smoothing step blends the whole displacement — normal
+                // height included, which it should not keep...
+                LaplacianSmoothing.Smooth(displacements, adjacency, region, options.Lambda, 1);
+                Compose(originals, displacements, positions);
+
+                // ...so immediately project every vertex smoothing sank back to
+                // the margin surface. The push is along the SDF gradient, so it
+                // restores only the normal component and preserves the tangential
+                // blend. New hits widen the region so re-penetration outside the
+                // seed ring is caught.
+                var reHits = PenetrationDetection.Scan(positions, body, margin);
+                if (reHits.Count > 0)
+                {
+                    ApplyPushOut(originals, displacements, reHits, body, margin);
+                    AddSeeds(seeds, reHits);
+                    region = LaplacianSmoothing.ExpandRegion(adjacency, seeds, options.Rings);
+                }
+            }
+
+            // Always end on a projection: the final state sits on or above the
+            // margin surface (invariant).
+            Compose(originals, displacements, positions);
+            int finalHitCount =
+                PenetrationDetection.Scan(positions, body, margin - FinalResidualTolerance).Count;
+            return new SolveResult(initialHitCount, passes, finalHitCount);
+        }
+
+        /// <summary>
+        /// Rewrites <paramref name="displacements"/> so that
+        /// original + displacement sits <paramref name="margin"/> above the body
+        /// surface, starting from each hit vertex's current displaced position
+        /// (so the same hit list can drive a re-push after smoothing).
+        /// </summary>
+        static void ApplyPushOut(
+            Vector3[] originals, Vector3[] displacements, List<PenetrationHit> hits,
+            ISignedDistanceField body, float margin)
+        {
+            foreach (var hit in hits)
+            {
+                int v = hit.VertexIndex;
+                Vector3 current = originals[v] + displacements[v];
+                Vector3 target = body.PushOut(current, margin);
+                displacements[v] = target - originals[v];
+            }
+        }
+
+        static void AddSeeds(HashSet<int> seeds, List<PenetrationHit> hits)
+        {
+            foreach (var hit in hits)
+            {
+                seeds.Add(hit.VertexIndex);
+            }
+        }
+
+        static void Compose(Vector3[] originals, Vector3[] displacements, Vector3[] target)
+        {
+            for (int v = 0; v < target.Length; v++)
+            {
+                target[v] = originals[v] + displacements[v];
+            }
         }
     }
 }
