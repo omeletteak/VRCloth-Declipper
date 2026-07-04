@@ -89,7 +89,13 @@ namespace Declipper.Core.Solver
                     {
                         sum += displacements[neighbors[n]];
                     }
-                    Vector3 smoothed = Vector3.Lerp(displacements[rep], sum / neighbors.Count, lambda);
+                    // Explicit lerp a + (b-a)*t (not System.Numerics' a*(1-t)+b*t)
+                    // to match v1's UnityEngine.Vector3.Lerp bit-for-bit — lambda
+                    // is in [0,1] so Unity's clamp is a no-op. Keeps the golden
+                    // tests against v1 tight.
+                    Vector3 current = displacements[rep];
+                    Vector3 average = sum / neighbors.Count;
+                    Vector3 smoothed = current + (average - current) * lambda;
                     updates.Add(new KeyValuePair<int, Vector3>(rep, smoothed));
                 }
 
