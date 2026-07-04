@@ -62,6 +62,18 @@ namespace VRClothDeclipper.GoldenFixtures
             public float pfLargestPatchRatio;
         }
 
+        /// <summary>One mesh-SDF fixture: a synthetic closed body and v1's signed
+        /// distance at a lattice of probe points, for the MeshSdf port.</summary>
+        [System.Serializable]
+        public class MeshSdfCase
+        {
+            public string name;
+            public float[] bodyVertices;
+            public int[] bodyTriangles;
+            public float[] probes;    // flattened xyz
+            public float[] distances; // v1 MeshSdfCollider.SignedDistance
+        }
+
         /// <summary>Entry point for <c>-executeMethod</c>.</summary>
         public static void DumpAll()
         {
@@ -77,6 +89,12 @@ namespace VRClothDeclipper.GoldenFixtures
                               $"(verts={c.clothVertices.Length / 3}, hits={c.detHitIndices.Length}, " +
                               $"verdict={c.pfVerdict}, redCause={c.pfRedCause})");
                 }
+
+                var mesh = MeshSdfSphere();
+                File.WriteAllText(Path.Combine(dir, mesh.name + ".json"), JsonUtility.ToJson(mesh, true));
+                Debug.Log($"[GoldenFixtureDumper] wrote {mesh.name}.json " +
+                          $"(body verts={mesh.bodyVertices.Length / 3}, probes={mesh.probes.Length / 3})");
+
                 Debug.Log($"[GoldenFixtureDumper] done -> {dir}");
                 if (Application.isBatchMode) EditorApplication.Exit(0);
             }
@@ -178,7 +196,88 @@ namespace VRClothDeclipper.GoldenFixtures
             c.finalHitCount = res.finalHitCount;
         }
 
+        static MeshSdfCase MeshSdfSphere()
+        {
+            BuildUvSphere(0.3f, 12, 16, out var verts, out var tris);
+            var collider = new MeshSdfCollider(verts, tris);
+
+            var probes = new List<Vector3>();
+            const int n = 6;
+            for (int i = 0; i < n; i++)
+            {
+                for (int j = 0; j < n; j++)
+                {
+                    for (int k = 0; k < n; k++)
+                    {
+                        probes.Add(new Vector3(
+                            Mathf.Lerp(-0.45f, 0.45f, i / (float)(n - 1)),
+                            Mathf.Lerp(-0.45f, 0.45f, j / (float)(n - 1)),
+                            Mathf.Lerp(-0.45f, 0.45f, k / (float)(n - 1))));
+                    }
+                }
+            }
+
+            var c = new MeshSdfCase
+            {
+                name = "meshsdf_sphere",
+                bodyVertices = Flatten(verts),
+                bodyTriangles = tris,
+                probes = Flatten(probes.ToArray()),
+                distances = new float[probes.Count],
+            };
+            for (int p = 0; p < probes.Count; p++)
+            {
+                c.distances[p] = collider.SignedDistance(probes[p]);
+            }
+            return c;
+        }
+
         // --- procedural meshes ---------------------------------------------
+
+        static void BuildUvSphere(float r, int stacks, int slices, out Vector3[] verts, out int[] tris)
+        {
+            var v = new List<Vector3>();
+            for (int i = 0; i <= stacks; i++)
+            {
+                float phi = Mathf.PI * i / stacks; // 0..π (pole to pole)
+                for (int j = 0; j <= slices; j++)
+                {
+                    float theta = 2f * Mathf.PI * j / slices;
+                    v.Add(new Vector3(
+                        r * Mathf.Sin(phi) * Mathf.Cos(theta),
+                        r * Mathf.Cos(phi),
+                        r * Mathf.Sin(phi) * Mathf.Sin(theta)));
+                }
+            }
+            verts = v.ToArray();
+
+            var t = new List<int>();
+            int cols = slices + 1;
+            for (int i = 0; i < stacks; i++)
+            {
+                for (int j = 0; j < slices; j++)
+                {
+                    int a = i * cols + j, b = a + 1, cc = (i + 1) * cols + j, d = cc + 1;
+                    // Convex body -> orient each face outward via the origin so the
+                    // winding-number sign reads a coherent ±1 inside.
+                    AddOutward(t, verts, a, cc, b);
+                    AddOutward(t, verts, b, cc, d);
+                }
+            }
+            tris = t.ToArray();
+        }
+
+        static void AddOutward(List<int> tris, Vector3[] verts, int i0, int i1, int i2)
+        {
+            Vector3 n = Vector3.Cross(verts[i1] - verts[i0], verts[i2] - verts[i0]);
+            Vector3 faceCenter = (verts[i0] + verts[i1] + verts[i2]) / 3f;
+            if (Vector3.Dot(n, faceCenter) < 0f) // center of body is the origin
+            {
+                int tmp = i1; i1 = i2; i2 = tmp;
+            }
+            tris.Add(i0); tris.Add(i1); tris.Add(i2);
+        }
+
 
         static void BuildTube(float r, float h, int hSeg, int rSeg, out Vector3[] verts, out int[] tris)
         {

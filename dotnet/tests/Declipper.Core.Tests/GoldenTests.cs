@@ -36,6 +36,8 @@ namespace Declipper.Core.Tests
             if (dir == null) yield break;
             foreach (var f in Directory.GetFiles(dir, "*.json"))
             {
+                // meshsdf_* fixtures have a different schema (MeshSdf_ReproducesV1).
+                if (Path.GetFileName(f).StartsWith("meshsdf")) continue;
                 yield return f;
             }
         }
@@ -92,6 +94,30 @@ namespace Declipper.Core.Tests
                 maxDelta = MathF.Max(maxDelta, (solved[i] - expected[i]).Length());
             }
             Assert.That(maxDelta, Is.LessThan(SolvedTolerance), $"max solved-vertex deviation {maxDelta}");
+        }
+
+        [Test]
+        public void MeshSdf_ReproducesV1()
+        {
+            string? dir = FixturesDir();
+            Assert.That(dir, Is.Not.Null);
+            string path = Path.Combine(dir!, "meshsdf_sphere.json");
+            Assert.That(File.Exists(path), $"missing {path}");
+
+            MeshSdfCase g = JsonSerializer.Deserialize<MeshSdfCase>(File.ReadAllText(path), JsonOpts)!;
+            var sdf = new MeshSdf(ParseVerts(g.bodyVertices), g.bodyTriangles);
+            Vector3[] probes = ParseVerts(g.probes);
+
+            float maxDelta = 0f;
+            for (int i = 0; i < probes.Length; i++)
+            {
+                float v2 = sdf.Sample(probes[i]).Distance;
+                maxDelta = MathF.Max(maxDelta, MathF.Abs(v2 - g.distances[i]));
+            }
+            // BVH distance is exact; the Barnes–Hut winding sign is orientation-
+            // robust, so v1 and v2 agree well away from the surface. 1e-3 absorbs
+            // near-surface sign ambiguity where |distance| is already ~0.
+            Assert.That(maxDelta, Is.LessThan(1e-3f), $"max |v2 - v1| mesh SDF distance = {maxDelta}");
         }
 
         // --- fixture loading ----------------------------------------------
@@ -175,6 +201,16 @@ namespace Declipper.Core.Tests
             public float pfP95Depth;
             public float pfMaxDepthOverThickness;
             public float pfLargestPatchRatio;
+        }
+
+        // Mirrors GoldenFixtureDumper.MeshSdfCase.
+        class MeshSdfCase
+        {
+            public string name = "";
+            public float[] bodyVertices = Array.Empty<float>();
+            public int[] bodyTriangles = Array.Empty<int>();
+            public float[] probes = Array.Empty<float>();
+            public float[] distances = Array.Empty<float>();
         }
 #pragma warning restore CS0649
     }
