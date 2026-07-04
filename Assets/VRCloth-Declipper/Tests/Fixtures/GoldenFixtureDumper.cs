@@ -63,7 +63,7 @@ namespace VRClothDeclipper.GoldenFixtures
         }
 
         /// <summary>One mesh-SDF fixture: a synthetic closed body and v1's signed
-        /// distance at a lattice of probe points, for the MeshSdf port.</summary>
+        /// distance and gradient at a lattice of probe points, for the MeshSdf port.</summary>
         [System.Serializable]
         public class MeshSdfCase
         {
@@ -72,6 +72,41 @@ namespace VRClothDeclipper.GoldenFixtures
             public int[] bodyTriangles;
             public float[] probes;    // flattened xyz
             public float[] distances; // v1 MeshSdfCollider.SignedDistance
+            public float[] gradients; // v1 MeshSdfCollider.Gradient (flattened xyz)
+        }
+
+        /// <summary>One full-solve fixture on a mesh body: cloth over a mesh SDF,
+        /// with v1 detection / solve / preflight, for the MeshSdf + solver path.</summary>
+        [System.Serializable]
+        public class MeshSolveCase
+        {
+            public string name;
+            public float margin;
+            public float lambda;
+            public int iterations;
+            public int rings;
+
+            public float[] clothVertices;
+            public int[] clothTriangles;
+            public float[] bodyVertices;
+            public int[] bodyTriangles;
+
+            public int[] detHitIndices;
+            public float[] detHitDepths;
+
+            public float[] solvedVertices;
+            public int initialHitCount;
+            public int finalHitCount;
+
+            public int pfVerdict;
+            public int pfRedCause;
+            public int pfVertexCount;
+            public int pfPenetratingCount;
+            public float pfPenetratingRatio;
+            public float pfMaxDepth;
+            public float pfP95Depth;
+            public float pfMaxDepthOverThickness;
+            public float pfLargestPatchRatio;
         }
 
         /// <summary>Entry point for <c>-executeMethod</c>.</summary>
@@ -94,6 +129,13 @@ namespace VRClothDeclipper.GoldenFixtures
                 File.WriteAllText(Path.Combine(dir, mesh.name + ".json"), JsonUtility.ToJson(mesh, true));
                 Debug.Log($"[GoldenFixtureDumper] wrote {mesh.name}.json " +
                           $"(body verts={mesh.bodyVertices.Length / 3}, probes={mesh.probes.Length / 3})");
+
+                var meshSolve = ClothShellInSphere();
+                File.WriteAllText(Path.Combine(dir, meshSolve.name + ".json"), JsonUtility.ToJson(meshSolve, true));
+                Debug.Log($"[GoldenFixtureDumper] wrote {meshSolve.name}.json " +
+                          $"(cloth={meshSolve.clothVertices.Length / 3}, body={meshSolve.bodyVertices.Length / 3}, " +
+                          $"hits={meshSolve.detHitIndices.Length}, verdict={meshSolve.pfVerdict}, " +
+                          $"final={meshSolve.finalHitCount})");
 
                 Debug.Log($"[GoldenFixtureDumper] done -> {dir}");
                 if (Application.isBatchMode) EditorApplication.Exit(0);
@@ -224,11 +266,75 @@ namespace VRClothDeclipper.GoldenFixtures
                 bodyTriangles = tris,
                 probes = Flatten(probes.ToArray()),
                 distances = new float[probes.Count],
+                gradients = new float[probes.Count * 3],
             };
             for (int p = 0; p < probes.Count; p++)
             {
                 c.distances[p] = collider.SignedDistance(probes[p]);
+                Vector3 g = collider.Gradient(probes[p]);
+                c.gradients[p * 3] = g.x;
+                c.gradients[p * 3 + 1] = g.y;
+                c.gradients[p * 3 + 2] = g.z;
             }
+            return c;
+        }
+
+        static MeshSolveCase ClothShellInSphere()
+        {
+            // A cloth shell just inside the body sphere: every cloth vertex sits
+            // ~0.05 below the surface, so it is (a) clearly inside — the winding
+            // sign is a stable ±1, not the grazing ~0.5 — and (b) unambiguously
+            // closest to the one facet radially outside it, not equidistant to
+            // many facets like a deep/central vertex. A mesh SDF's gradient is
+            // discontinuous across facet-cell boundaries, and v1's Unity BVH vs
+            // v2's .NET BVH break the closest-facet tie differently at float
+            // precision, so only a surface-following, well-separated cloth keeps
+            // the solve reproducible. A small rotation keeps cloth vertices off
+            // the body's radial facet edges (which would be the ambiguous ties).
+            BuildUvSphere(0.25f, 24, 32, out var bodyVerts, out var bodyTris);
+            BuildUvSphere(0.20f, 14, 20, out var clothVerts, out var clothTris);
+            Quaternion rot = Quaternion.Euler(7f, 13f, 5f);
+            for (int i = 0; i < clothVerts.Length; i++)
+            {
+                clothVerts[i] = rot * clothVerts[i];
+            }
+
+            var collider = new MeshSdfCollider(bodyVerts, bodyTris);
+            var c = new MeshSolveCase
+            {
+                name = "meshsolve_shell_in_sphere",
+                margin = 0.01f, lambda = 0.5f, iterations = 8, rings = 2,
+                clothVertices = Flatten(clothVerts),
+                clothTriangles = clothTris,
+                bodyVertices = Flatten(bodyVerts),
+                bodyTriangles = bodyTris,
+            };
+
+            var hits = PenetrationDetection.Scan(clothVerts, collider, c.margin);
+            c.detHitIndices = new int[hits.Count];
+            c.detHitDepths = new float[hits.Count];
+            for (int i = 0; i < hits.Count; i++)
+            {
+                c.detHitIndices[i] = hits[i].vertexIndex;
+                c.detHitDepths[i] = hits[i].depth;
+            }
+
+            var report = PreflightDiagnostic.Evaluate(clothVerts, clothTris, hits, collider, c.margin);
+            c.pfVerdict = (int)report.verdict;
+            c.pfRedCause = (int)report.redCause;
+            c.pfVertexCount = report.vertexCount;
+            c.pfPenetratingCount = report.penetratingCount;
+            c.pfPenetratingRatio = report.penetratingRatio;
+            c.pfMaxDepth = report.maxDepth;
+            c.pfP95Depth = report.p95Depth;
+            c.pfMaxDepthOverThickness = report.maxDepthOverRadius;
+            c.pfLargestPatchRatio = report.largestPatchRatio;
+
+            var solved = (Vector3[])clothVerts.Clone();
+            var res = PenetrationSolver.SolveProjected(solved, clothTris, collider, c.margin, c.lambda, c.iterations, c.rings);
+            c.solvedVertices = Flatten(solved);
+            c.initialHitCount = res.initialHitCount;
+            c.finalHitCount = res.finalHitCount;
             return c;
         }
 

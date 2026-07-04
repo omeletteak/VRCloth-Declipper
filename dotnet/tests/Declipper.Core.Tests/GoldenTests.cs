@@ -36,8 +36,9 @@ namespace Declipper.Core.Tests
             if (dir == null) yield break;
             foreach (var f in Directory.GetFiles(dir, "*.json"))
             {
-                // meshsdf_* fixtures have a different schema (MeshSdf_ReproducesV1).
-                if (Path.GetFileName(f).StartsWith("meshsdf")) continue;
+                // mesh* fixtures have their own schemas + tests (MeshSdf_ReproducesV1,
+                // MeshSolve_ReproducesV1).
+                if (Path.GetFileName(f).StartsWith("mesh")) continue;
                 yield return f;
             }
         }
@@ -107,17 +108,89 @@ namespace Declipper.Core.Tests
             MeshSdfCase g = JsonSerializer.Deserialize<MeshSdfCase>(File.ReadAllText(path), JsonOpts)!;
             var sdf = new MeshSdf(ParseVerts(g.bodyVertices), g.bodyTriangles);
             Vector3[] probes = ParseVerts(g.probes);
+            Vector3[] v1Gradients = ParseVerts(g.gradients);
 
-            float maxDelta = 0f;
+            float maxDistDelta = 0f;
+            float minGradDot = 1f;
+            int gradChecked = 0, gradTight = 0;
             for (int i = 0; i < probes.Length; i++)
             {
-                float v2 = sdf.Sample(probes[i]).Distance;
-                maxDelta = MathF.Max(maxDelta, MathF.Abs(v2 - g.distances[i]));
+                SdfSample s = sdf.Sample(probes[i]);
+                maxDistDelta = MathF.Max(maxDistDelta, MathF.Abs(s.Distance - g.distances[i]));
+
+                Assert.That(s.Gradient.Length(), Is.EqualTo(1f).Within(1e-4f), $"probe {i} unit gradient");
+                // Compare gradient direction only where the sign is stable (well
+                // clear of the surface). Near the surface both the sign (winding≈0.5)
+                // and the outward direction (|p - surface|≈0) are ill-conditioned.
+                if (MathF.Abs(g.distances[i]) > 0.03f)
+                {
+                    float dot = Vector3.Dot(s.Gradient, v1Gradients[i]);
+                    minGradDot = MathF.Min(minGradDot, dot);
+                    gradChecked++;
+                    if (dot > 0.999f) gradTight++;
+                }
             }
-            // BVH distance is exact; the Barnes–Hut winding sign is orientation-
-            // robust, so v1 and v2 agree well away from the surface. 1e-3 absorbs
-            // near-surface sign ambiguity where |distance| is already ~0.
-            Assert.That(maxDelta, Is.LessThan(1e-3f), $"max |v2 - v1| mesh SDF distance = {maxDelta}");
+            // BVH distance is exact; the scalar field reproduces tightly.
+            Assert.That(maxDistDelta, Is.LessThan(1e-3f), $"max |v2 - v1| mesh SDF distance = {maxDistDelta}");
+            // The gradient direction, however, is only reproducible up to facet
+            // conditioning: a mesh SDF's gradient is discontinuous across
+            // facet-cell boundaries, and v1(Mono)/v2(.NET) break the near-tie
+            // differently at float precision. So the vast majority agree tightly,
+            // a few boundary probes deviate, but none ever flip sign.
+            Assert.That(gradChecked, Is.GreaterThan(0));
+            Assert.That(gradTight, Is.GreaterThanOrEqualTo((int)(0.9f * gradChecked)),
+                $"only {gradTight}/{gradChecked} gradients matched tightly");
+            Assert.That(minGradDot, Is.GreaterThan(0.5f), $"a gradient nearly flipped: min dot = {minGradDot}");
+        }
+
+        [Test]
+        public void MeshSolve_ReproducesV1()
+        {
+            string? dir = FixturesDir();
+            Assert.That(dir, Is.Not.Null);
+            string path = Path.Combine(dir!, "meshsolve_shell_in_sphere.json");
+            Assert.That(File.Exists(path), $"missing {path}");
+
+            MeshSolveCase g = JsonSerializer.Deserialize<MeshSolveCase>(File.ReadAllText(path), JsonOpts)!;
+            var sdf = new MeshSdf(ParseVerts(g.bodyVertices), g.bodyTriangles);
+            Vector3[] positions = ParseVerts(g.clothVertices);
+            int[] triangles = g.clothTriangles;
+
+            // --- detection ---
+            List<PenetrationHit> hits = PenetrationDetection.Scan(positions, sdf, g.margin);
+            Assert.That(hits.Count, Is.EqualTo(g.detHitIndices.Length), "detection hit count");
+            for (int i = 0; i < hits.Count; i++)
+            {
+                Assert.That(hits[i].VertexIndex, Is.EqualTo(g.detHitIndices[i]), $"hit[{i}] index");
+                Assert.That(hits[i].Depth, Is.EqualTo(g.detHitDepths[i]).Within(1e-4f), $"hit[{i}] depth");
+            }
+
+            // --- preflight ---
+            PreflightReport report = PreflightDiagnostic.Evaluate(positions, triangles, hits, sdf, g.margin);
+            Assert.That((int)report.Verdict, Is.EqualTo(g.pfVerdict), "verdict");
+            Assert.That((int)report.RedCause, Is.EqualTo(g.pfRedCause), "red cause");
+            Assert.That(report.PenetratingCount, Is.EqualTo(g.pfPenetratingCount), "penetrating count");
+            Assert.That(report.MaxDepth, Is.EqualTo(g.pfMaxDepth).Within(1e-4f), "max depth");
+
+            // --- solve ---
+            var solved = (Vector3[])positions.Clone();
+            SolveResult res = ProjectedSolver.Solve(
+                solved, triangles, sdf, new SolverOptions(g.margin, g.lambda, g.iterations, g.rings));
+            Assert.That(res.InitialHitCount, Is.EqualTo(g.initialHitCount), "initial hit count");
+            Assert.That(res.FinalHitCount, Is.EqualTo(g.finalHitCount), "final hit count");
+
+            Vector3[] expected = ParseVerts(g.solvedVertices);
+            float maxDelta = 0f;
+            int worst = -1, over = 0;
+            for (int i = 0; i < solved.Length; i++)
+            {
+                float d = (solved[i] - expected[i]).Length();
+                if (d > 1e-3f) over++;
+                if (d > maxDelta) { maxDelta = d; worst = i; }
+            }
+            TestContext.WriteLine($"[meshsolve] over-1e-3={over}/{solved.Length} worst=v{worst} " +
+                $"delta={maxDelta} v1={expected[worst]} v2={solved[worst]}");
+            Assert.That(maxDelta, Is.LessThan(SolvedTolerance), $"max solved-vertex deviation {maxDelta}");
         }
 
         // --- fixture loading ----------------------------------------------
@@ -211,6 +284,34 @@ namespace Declipper.Core.Tests
             public int[] bodyTriangles = Array.Empty<int>();
             public float[] probes = Array.Empty<float>();
             public float[] distances = Array.Empty<float>();
+            public float[] gradients = Array.Empty<float>();
+        }
+
+        // Mirrors GoldenFixtureDumper.MeshSolveCase.
+        class MeshSolveCase
+        {
+            public float margin;
+            public float lambda;
+            public int iterations;
+            public int rings;
+            public float[] clothVertices = Array.Empty<float>();
+            public int[] clothTriangles = Array.Empty<int>();
+            public float[] bodyVertices = Array.Empty<float>();
+            public int[] bodyTriangles = Array.Empty<int>();
+            public int[] detHitIndices = Array.Empty<int>();
+            public float[] detHitDepths = Array.Empty<float>();
+            public float[] solvedVertices = Array.Empty<float>();
+            public int initialHitCount;
+            public int finalHitCount;
+            public int pfVerdict;
+            public int pfRedCause;
+            public int pfVertexCount;
+            public int pfPenetratingCount;
+            public float pfPenetratingRatio;
+            public float pfMaxDepth;
+            public float pfP95Depth;
+            public float pfMaxDepthOverThickness;
+            public float pfLargestPatchRatio;
         }
 #pragma warning restore CS0649
     }
