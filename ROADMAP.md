@@ -14,7 +14,7 @@
 システムをゼロベースで設計し直した目標アーキテクチャ(4本柱: 純 .NET コア / SDF 単一体表現 / 制約付き最適化ソルバ一本化 / 体表面対応 binding を中核プリミティブに)への段階移行。決定の背景・維持事項・移行不変条件は [docs/REARCHITECTURE.md](docs/REARCHITECTURE.md)。**製品スコープ(貫通修正特化・No Cache・NDMF ファースト)は不変**。移行中も v1 パイプラインは常に動作を維持し、ゴールデンテストが通るまで v1 コードは削除しない。
 
 - [x] **S0: スケルトン** — `dotnet/` に純 .NET コア(`netstandard2.1`/C# 9 = Unity 2022.3 互換上限)の契約とスタブ、NUnit テストハーネスを配置(2026-07-03)。`CapsuleSetSdf` は実装済み、`MeshSdf`/ソルバ/診断は契約 doc 付きスタブ。**注意: 作成マシンに dotnet SDK が無くビルド未検証** — 着手時の最初の作業は `dotnet test` の通過確認([dotnet/README.md](dotnet/README.md))
-- [~] **S1: 幾何コアの移植+ゴールデンテスト**(移植完了・ゴールデン検証残) — v1 Core の数学を `dotnet/` へ移植済み: 検出(`PenetrationDetection`)・隣接(`VertexAdjacency`)・平滑化(`LaplacianSmoothing`)・projected ソルバ(`ProjectedSolver`)・メッシュSDF(`MeshSdf`, BVH+Barnes–Hut)・プリフライト(`PreflightDiagnostic`)・体表面 binding(`CapsuleSurface`, 新規)。純組合せ/解析的に正解が書ける部分は構成的ユニットテストで固定(全24件・`dotnet test` 秒未満)。**残: ゴールデンフィクスチャ基盤**(v1 Unity バッチダンプ→合成/再配布自由マネキン限定の JSON、S2 の v1 置換ゲート・FP 重量級の v1 比検証用)。実装順・移植時の設計判断/妥協点は [dotnet/README.md](dotnet/README.md) §S1
+- [x] **S1: 幾何コアの移植+ゴールデンテスト**(完了) — v1 Core の数学を `dotnet/` へ移植: 検出(`PenetrationDetection`)・隣接(`VertexAdjacency`)・平滑化(`LaplacianSmoothing`)・projected ソルバ(`ProjectedSolver`)・メッシュSDF(`MeshSdf`, BVH+Barnes–Hut)・プリフライト(`PreflightDiagnostic`)・体表面 binding(`CapsuleSurface`, 新規)。v1↔v2 ゴールデンゲート稼働(合成入力で capsule 系は検出+ソルブ+プリフライト、mesh SDF は距離を照合)＝**S2 で v1 を置換する条件が成立**。全29件緑・`dotnet test` 秒未満。実装順・移植時の設計判断/妥協点・ゴールデン再生成手順は [dotnet/README.md](dotnet/README.md)
 - [ ] **S2: Unity アダプタ** — 同一ソースの Unity 共有コンパイル(source-share か UPM ローカルパッケージ、S2 冒頭で方式決定)。Editor 層の呼び出しを段階的に v2 コアへ差し替え
 - [ ] **S3: 二重経路の削除** — coarse `Solve`・カプセル専用検出パス・旧 `IBodyCollider` を削除。EditMode テストは Unity 統合(キャプチャ・書き戻し・NDMF・実スキニング整合)だけに縮小
 

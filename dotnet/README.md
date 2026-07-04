@@ -2,9 +2,9 @@
 
 v2 再設計([docs/REARCHITECTURE.md](../docs/REARCHITECTURE.md))の柱1「UnityEngine 完全非依存の幾何コア」の実装場所。数学は `System.Numerics.Vector3`、テストは `dotnet test` で秒単位に回る。Unity 側は将来(S2)このソースを共有コンパイルするため、**`netstandard2.1` / C# 9 を超える言語機能・API は使わないこと**(Unity 2022.3 互換の上限)。
 
-## 状態(2026-07-04, S1 移植完了・ゴールデン検証残)
+## 状態(2026-07-04, S1 移植＋ゴールデンゲート完了)
 
-スタブは全て実装済み。`dotnet test` は **24件緑・秒未満**(dotnet SDK 9.0 で検証、`src` は `netstandard2.1`/C# 9 を維持):
+スタブは全て実装済み、v1↔v2 ゴールデンゲートも稼働。`dotnet test` は **29件緑・秒未満**(dotnet SDK 9.0 で検証、`src` は `netstandard2.1`/C# 9 を維持):
 
 ```bash
 cd dotnet && dotnet test
@@ -22,12 +22,18 @@ cd dotnet && dotnet test
 | `Diagnostics/PreflightDiagnostic` | 同名 v1 | Green/Collapsed/Retargeting/InnerWall 分類 |
 | `Surface/CapsuleSurface` | 新規(v1 対応物なし) | round-trip 恒等(body＋caps＋球)・margin クランプ |
 
-### 保留(parked) — ゴールデンフィクスチャ基盤
+### ゴールデンフィクスチャ基盤(landed)
 
-S1 実装順の step 1(下記)は**未着手**。要 Unity バッチダンプで、エージェント単独では回しにくいため保留。用途は (a) FP 重量級(`MeshSdf`・ソルバ全経路)の v1 数値一致検証、(b) **S2 で v1 を置換する際のゲート**(§4「ゴールデンテストが通るまで v1 を消さない」)。純組合せ部分は解析テストで代替済みなので、この基盤が無くても S2 の設計検討には入れる。
+v1↔v2 等価ゲートが稼働(§4「ゴールデンテストが通るまで v1 を消さない」= **S2 で v1 を置換する条件**)。
 
-- v1(Unity)から代表入力の検出結果・ソルブ後頂点・プリフライト統計を JSON ダンプするユーティリティを書き `tests/fixtures/` に固定
-- **入力の権利制約**: public repo にコミットされるため、入力メッシュは**合成(プロシージャル)または再配布自由な基準マネキン限定**。購入アセット由来の頂点(ソルブ後の衣装形状含む)は No Cache・再配布禁止の両方に抵触するのでコミットしない
+- ダンパー: `Assets/VRCloth-Declipper/Tests/Fixtures/GoldenFixtureDumper.cs`(Editor 専用 asmdef・`UNITY_INCLUDE_TESTS` 非依存)。Unity バッチで再生成:
+  ```bash
+  Unity.exe -batchmode -quit -projectPath <repo> \
+    -executeMethod VRClothDeclipper.GoldenFixtures.GoldenFixtureDumper.DumpAll
+  ```
+- fixtures(`dotnet/tests/fixtures/*.json`): capsule 系3件(`tube_over_capsule`/`sheet_over_sphere`/`two_spheres`, 検出+ソルブ+プリフライト)＋mesh SDF 1件(`meshsdf_sphere`, 216 プローブの符号付き距離)。照合は `GoldenTests.cs`
+- **入力の権利制約**: 入力は 100% 手続き生成(購入・アバター由来ゼロ)なので入出力とも public repo に commit 可 — No Cache・再配布禁止の両方を満たす
+- **残(小)**: capsule 系はソルブ後頂点まで golden 化済み、mesh SDF は距離のみ(勾配・mesh ボディでのフルソルブ golden は未)。基準マネキン(ROADMAP フェーズ5)を使った E2E 近似 fixture も将来足せる
 
 ### 移植時の設計判断・妥協点(記録)
 
