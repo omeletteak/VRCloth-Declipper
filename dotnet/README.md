@@ -43,7 +43,8 @@ dotnet/
 
 各スタブの XML doc が契約と移植元ポインタを持つ。移植は「v1 の数学をそのまま、型だけ差し替え」が原則 — アルゴリズム改良は移植と混ぜない。
 
-1. **ゴールデンフィクスチャの用意(最初にやる)** — v1(Unity バッチモード)から代表入力(実衣装メッシュ1つ+カプセル列/素体メッシュ)に対する検出結果・ソルブ後頂点・プリフライト統計を JSON で吐くダンプを書き、`tests/fixtures/` に固定。以後の移植はすべて「v2 が同一出力を返すか」で合否を取る(docs/REARCHITECTURE.md §4 S1)
+1. **ゴールデンフィクスチャの用意(最初にやる)** — v1(Unity バッチモード)から代表入力に対する検出結果・ソルブ後頂点・プリフライト統計を JSON で吐くダンプを書き、`tests/fixtures/` に固定。以後の移植はすべて「v2 が同一出力を返すか」で合否を取る(docs/REARCHITECTURE.md §4 S1)。
+   **入力の権利制約(必須)**: フィクスチャは public リポジトリにコミットされる。入力メッシュ(衣装・素体とも)は**合成メッシュ(プロシージャル生成)または再配布自由な基準マネキン(ROADMAP フェーズ5)に限る**。購入アセット由来の頂点データは、ソルブ後頂点(=変形した衣装形状)を含め一切コミットしない — No Cache 原則と再配布禁止の両方に抵触する
 2. `PenetrationDetection` ← `Assets/VRCloth-Declipper/Core/PenetrationDetection.cs`(自明)
 3. `VertexAdjacency` / `LaplacianSmoothing` ← 同名 v1 ファイル(シーム溶接の意味論に注意)
 4. `ProjectedSolver` ← `PenetrationSolver.SolveProjected`(coarse `Solve` は**移植しない**)
