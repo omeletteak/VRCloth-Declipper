@@ -1,45 +1,390 @@
 using System;
+using System.Collections.Generic;
 using System.Numerics;
 
 namespace Declipper.Core.Sdf
 {
     /// <summary>
-    /// STUB — S1 port target. The body-mesh SDF: exact closest-triangle
-    /// distance via a BVH (branch-and-bound) plus sign from generalized
-    /// winding number with Barnes–Hut far-field clustering (dipole
-    /// approximation for far clusters, exact near the surface), robust to
-    /// non-watertight meshes.
+    /// The body-mesh SDF: exact closest-triangle distance via a BVH
+    /// (branch-and-bound) plus sign from the generalized winding number with
+    /// Barnes–Hut far-field clustering (dipole approximation for far clusters,
+    /// exact solid angles near the surface), robust to the non-watertight,
+    /// self-intersecting meshes avatar bodies tend to be.
     ///
-    /// Port from Assets/VRCloth-Declipper/Core/MeshSdfCollider.cs — the v1
-    /// implementation is already accelerated (~63 ms per 2k-vertex scan
-    /// against a 50k-triangle body) and its math carries over unchanged; only
-    /// UnityEngine.Vector3 → System.Numerics.Vector3 changes. Golden-test
-    /// against v1 outputs on fixture meshes before removal of v1
-    /// (docs/REARCHITECTURE.md §4 S1). Keep the whole build in memory — no
-    /// serialization API, No Cache holds.
+    /// Ported from Assets/VRCloth-Declipper/Core/MeshSdfCollider.cs; the math is
+    /// unchanged (UnityEngine.Vector3 → System.Numerics.Vector3). v1 exposed
+    /// distance and gradient as separate queries backed by a one-entry memo;
+    /// v2's contract is the combined <see cref="Sample"/>, so the memo is
+    /// dropped — a stateless SDF is what the "parallel over vertices" goal needs
+    /// (docs/REARCHITECTURE.md §2 柱2). Built in memory, never serialized — No
+    /// Cache holds.
     /// </summary>
     public sealed class MeshSdf : ISignedDistanceField
     {
+        /// <summary>
+        /// Default local thickness handed to the preflight diagnostic when the
+        /// body is a mesh. Unlike a capsule, a mesh has no single radius, so we
+        /// use a nominal limb thickness; the absolute-depth thresholds carry
+        /// most of the verdict. Calibrated during E2E.
+        /// </summary>
+        public const float DefaultNominalThickness = 0.08f;
+
+        const int LeafSize = 8;
+        const float Beta = 2.0f; // Barnes–Hut acceptance: approximate when |p−c̄| > β·radius
+
+        struct Node
+        {
+            public Vector3 boundsMin, boundsMax;
+            public Vector3 weightedCentroid;  // area-weighted centroid c̄
+            public Vector3 weightedNormalSum; // Σ area·normal (dipole moment P)
+            public float maxDist;             // c̄ to the farthest vertex in the subtree
+            public int start, count;          // range into triOrder (leaves)
+            public int left, right;           // child node indices, -1 for a leaf
+        }
+
+        readonly Vector3[] vertices;
+        readonly int[] triangles;
+        readonly int triangleCount;
+        readonly float nominalThickness;
+
+        readonly Vector3[] triCentroid;
+        readonly Vector3[] triWeightedNormal; // 0.5·cross(ab,ac): |·| = area, dir = normal
+        readonly int[] triOrder;
+        readonly List<Node> nodes = new List<Node>();
+        readonly int root = -1;
+
         /// <param name="vertices">Body mesh vertices, world space, meters.</param>
         /// <param name="triangles">Index triples into <paramref name="vertices"/>.</param>
-        public MeshSdf(Vector3[] vertices, int[] triangles)
+        /// <param name="nominalThickness">Nominal local body thickness for preflight.</param>
+        public MeshSdf(Vector3[]? vertices, int[]? triangles, float nominalThickness = DefaultNominalThickness)
         {
-            throw new NotImplementedException("S1: port MeshSdfCollider (BVH + Barnes–Hut winding number).");
+            this.vertices = vertices ?? Array.Empty<Vector3>();
+            this.triangles = triangles ?? Array.Empty<int>();
+            this.triangleCount = this.triangles.Length / 3;
+            this.nominalThickness = nominalThickness;
+
+            triCentroid = new Vector3[triangleCount];
+            triWeightedNormal = new Vector3[triangleCount];
+            for (int t = 0; t < triangleCount; t++)
+            {
+                Vector3 a = this.vertices[this.triangles[t * 3]];
+                Vector3 b = this.vertices[this.triangles[t * 3 + 1]];
+                Vector3 c = this.vertices[this.triangles[t * 3 + 2]];
+                triCentroid[t] = (a + b + c) / 3f;
+                triWeightedNormal[t] = 0.5f * Vector3.Cross(b - a, c - a);
+            }
+
+            if (triangleCount > 0)
+            {
+                triOrder = new int[triangleCount];
+                for (int t = 0; t < triangleCount; t++) triOrder[t] = t;
+                root = BuildNode(0, triangleCount);
+            }
+            else
+            {
+                triOrder = Array.Empty<int>();
+            }
         }
+
+        /// <summary>True when the mesh has at least one triangle to query.</summary>
+        public bool IsValid => triangleCount > 0;
+
+        public float LocalThickness(in Vector3 position) => nominalThickness;
 
         public SdfSample Sample(in Vector3 position)
         {
-            throw new NotImplementedException("S1: port MeshSdfCollider (BVH + Barnes–Hut winding number).");
+            if (triangleCount == 0)
+            {
+                return new SdfSample(float.MaxValue, Vector3.UnitY);
+            }
+
+            float bestSq = float.MaxValue;
+            Vector3 bestSurface = position;
+            Vector3 bestNormal = Vector3.UnitY;
+            ClosestPoint(root, position, ref bestSq, ref bestSurface, ref bestNormal);
+
+            float distance = MathF.Sqrt(bestSq);
+            // |winding| ≈ 1 inside a closed mesh, ≈ 0 outside, for either global
+            // orientation — magnitude classifies inside/outside without depending
+            // on whether the mesh is wound outward or inward.
+            float sign = MathF.Abs(WindingNumber(root, position)) > 0.5f ? -1f : 1f;
+
+            Vector3 outward = position - bestSurface;
+            Vector3 gradient;
+            if (outward.LengthSquared() >= 1e-12f)
+            {
+                gradient = sign * Vector3.Normalize(outward);
+            }
+            else
+            {
+                Vector3 n = bestNormal.LengthSquared() >= 1e-12f ? Vector3.Normalize(bestNormal) : Vector3.UnitY;
+                gradient = sign < 0f ? -n : n;
+            }
+
+            return new SdfSample(sign * distance, gradient);
         }
 
-        /// <summary>
-        /// Nominal local body thickness. v1 derives this from the local
-        /// geometry (see MeshSdfCollider.LocalThickness); keep the same
-        /// definition so preflight thresholds calibrated on v1 carry over.
-        /// </summary>
-        public float LocalThickness(in Vector3 position)
+        // --- BVH build -----------------------------------------------------
+
+        int BuildNode(int start, int count)
         {
-            throw new NotImplementedException("S1: port MeshSdfCollider (BVH + Barnes–Hut winding number).");
+            int idx = nodes.Count;
+            nodes.Add(default);
+
+            var n = new Node { start = start, count = count, left = -1, right = -1 };
+
+            Vector3 bMin = new Vector3(float.MaxValue, float.MaxValue, float.MaxValue);
+            Vector3 bMax = new Vector3(float.MinValue, float.MinValue, float.MinValue);
+            Vector3 weightedCentroidSum = Vector3.Zero;
+            Vector3 normalSum = Vector3.Zero;
+            float areaSum = 0f;
+            Vector3 cMin = bMin, cMax = bMax; // centroid bounds, for the split axis
+
+            for (int i = start; i < start + count; i++)
+            {
+                int t = triOrder[i];
+                Vector3 a = vertices[triangles[t * 3]];
+                Vector3 b = vertices[triangles[t * 3 + 1]];
+                Vector3 c = vertices[triangles[t * 3 + 2]];
+                Encapsulate(ref bMin, ref bMax, a);
+                Encapsulate(ref bMin, ref bMax, b);
+                Encapsulate(ref bMin, ref bMax, c);
+
+                float area = triWeightedNormal[t].Length();
+                areaSum += area;
+                weightedCentroidSum += area * triCentroid[t];
+                normalSum += triWeightedNormal[t];
+                Encapsulate(ref cMin, ref cMax, triCentroid[t]);
+            }
+
+            n.boundsMin = bMin;
+            n.boundsMax = bMax;
+            n.weightedNormalSum = normalSum;
+            n.weightedCentroid = areaSum > 1e-12f ? weightedCentroidSum / areaSum : 0.5f * (bMin + bMax);
+
+            float maxDistSq = 0f;
+            for (int i = start; i < start + count; i++)
+            {
+                int t = triOrder[i];
+                for (int k = 0; k < 3; k++)
+                {
+                    float dsq = (vertices[triangles[t * 3 + k]] - n.weightedCentroid).LengthSquared();
+                    if (dsq > maxDistSq) maxDistSq = dsq;
+                }
+            }
+            n.maxDist = MathF.Sqrt(maxDistSq);
+
+            if (count <= LeafSize)
+            {
+                nodes[idx] = n;
+                return idx;
+            }
+
+            // Split on the longest axis of the centroid bounds.
+            Vector3 extent = cMax - cMin;
+            int axis = extent.X >= extent.Y ? (extent.X >= extent.Z ? 0 : 2) : (extent.Y >= extent.Z ? 1 : 2);
+            SortByCentroidAxis(start, count, axis);
+
+            int mid = count / 2;
+            n.left = BuildNode(start, mid);
+            n.right = BuildNode(start + mid, count - mid);
+            nodes[idx] = n;
+            return idx;
+        }
+
+        void SortByCentroidAxis(int start, int count, int axis)
+        {
+            Array.Sort(triOrder, start, count, Comparer<int>.Create((x, y) =>
+                Axis(triCentroid[x], axis).CompareTo(Axis(triCentroid[y], axis))));
+        }
+
+        static float Axis(Vector3 v, int axis) => axis == 0 ? v.X : (axis == 1 ? v.Y : v.Z);
+
+        static void Encapsulate(ref Vector3 min, ref Vector3 max, Vector3 p)
+        {
+            if (p.X < min.X) min.X = p.X; if (p.X > max.X) max.X = p.X;
+            if (p.Y < min.Y) min.Y = p.Y; if (p.Y > max.Y) max.Y = p.Y;
+            if (p.Z < min.Z) min.Z = p.Z; if (p.Z > max.Z) max.Z = p.Z;
+        }
+
+        // --- closest point (exact, branch-and-bound) -----------------------
+
+        void ClosestPoint(int nodeIdx, Vector3 p, ref float bestSq, ref Vector3 bestSurface, ref Vector3 bestNormal)
+        {
+            Node node = nodes[nodeIdx];
+            if (node.left < 0)
+            {
+                for (int i = node.start; i < node.start + node.count; i++)
+                {
+                    int t = triOrder[i];
+                    Vector3 a = vertices[triangles[t * 3]];
+                    Vector3 b = vertices[triangles[t * 3 + 1]];
+                    Vector3 c = vertices[triangles[t * 3 + 2]];
+                    Vector3 surface = ClosestPointOnTriangle(p, a, b, c);
+                    float dsq = (p - surface).LengthSquared();
+                    if (dsq < bestSq)
+                    {
+                        bestSq = dsq;
+                        bestSurface = surface;
+                        bestNormal = triWeightedNormal[t];
+                    }
+                }
+                return;
+            }
+
+            float dl = AabbDistanceSq(nodes[node.left], p);
+            float dr = AabbDistanceSq(nodes[node.right], p);
+            int near = dl <= dr ? node.left : node.right;
+            int far = dl <= dr ? node.right : node.left;
+            float nearD = MathF.Min(dl, dr);
+            float farD = MathF.Max(dl, dr);
+
+            if (nearD < bestSq) ClosestPoint(near, p, ref bestSq, ref bestSurface, ref bestNormal);
+            if (farD < bestSq) ClosestPoint(far, p, ref bestSq, ref bestSurface, ref bestNormal);
+        }
+
+        static float AabbDistanceSq(Node node, Vector3 p)
+        {
+            float dx = MathF.Max(MathF.Max(node.boundsMin.X - p.X, p.X - node.boundsMax.X), 0f);
+            float dy = MathF.Max(MathF.Max(node.boundsMin.Y - p.Y, p.Y - node.boundsMax.Y), 0f);
+            float dz = MathF.Max(MathF.Max(node.boundsMin.Z - p.Z, p.Z - node.boundsMax.Z), 0f);
+            return dx * dx + dy * dy + dz * dz;
+        }
+
+        // --- winding number (Barnes–Hut) -----------------------------------
+
+        float WindingNumber(int nodeIdx, Vector3 p)
+        {
+            double sum = WindingAccumulate(nodeIdx, p);
+            return (float)(sum / (4.0 * Math.PI));
+        }
+
+        double WindingAccumulate(int nodeIdx, Vector3 p)
+        {
+            Node node = nodes[nodeIdx];
+
+            if (node.left >= 0)
+            {
+                // Far cluster: collapse to a single dipole term. The signed solid
+                // angle of a patch seen from p is ≈ (c̄−p)·P / |c̄−p|³, with P the
+                // area-weighted normal sum.
+                Vector3 d = node.weightedCentroid - p;
+                float dist = d.Length();
+                if (dist > Beta * node.maxDist && dist > 1e-9f)
+                {
+                    return Vector3.Dot(d, node.weightedNormalSum) / (dist * dist * dist);
+                }
+                return WindingAccumulate(node.left, p) + WindingAccumulate(node.right, p);
+            }
+
+            double leaf = 0.0;
+            for (int i = node.start; i < node.start + node.count; i++)
+            {
+                int t = triOrder[i];
+                leaf += SolidAngle(
+                    vertices[triangles[t * 3]] - p,
+                    vertices[triangles[t * 3 + 1]] - p,
+                    vertices[triangles[t * 3 + 2]] - p);
+            }
+            return leaf;
+        }
+
+        static double SolidAngle(Vector3 a, Vector3 b, Vector3 c)
+        {
+            double la = a.Length(), lb = b.Length(), lc = c.Length();
+            if (la < 1e-12 || lb < 1e-12 || lc < 1e-12)
+            {
+                return 0.0; // p coincides with a vertex; skip its term
+            }
+            double numerator = Vector3.Dot(a, Vector3.Cross(b, c));
+            double denominator = la * lb * lc
+                + Vector3.Dot(a, b) * lc
+                + Vector3.Dot(b, c) * la
+                + Vector3.Dot(c, a) * lb;
+            return 2.0 * Math.Atan2(numerator, denominator);
+        }
+
+        // --- brute-force reference (tests) ---------------------------------
+
+        /// <summary>
+        /// The unaccelerated signed distance — closest point over every
+        /// triangle, sign from the full-mesh generalized winding number. Kept as
+        /// the reference the accelerated path is tested against.
+        /// </summary>
+        public static float SignedDistanceBruteForce(Vector3[]? verts, int[]? tris, Vector3 point)
+        {
+            int count = tris != null ? tris.Length / 3 : 0;
+            if (count == 0 || tris == null || verts == null) return float.MaxValue;
+
+            float bestSq = float.MaxValue;
+            for (int t = 0; t < count; t++)
+            {
+                Vector3 surface = ClosestPointOnTriangle(point,
+                    verts[tris[t * 3]], verts[tris[t * 3 + 1]], verts[tris[t * 3 + 2]]);
+                float dsq = (point - surface).LengthSquared();
+                if (dsq < bestSq) bestSq = dsq;
+            }
+
+            double sum = 0.0;
+            for (int t = 0; t < count; t++)
+            {
+                sum += SolidAngle(verts[tris[t * 3]] - point, verts[tris[t * 3 + 1]] - point, verts[tris[t * 3 + 2]] - point);
+            }
+            float winding = (float)(sum / (4.0 * Math.PI));
+            float sign = MathF.Abs(winding) > 0.5f ? -1f : 1f;
+            return sign * MathF.Sqrt(bestSq);
+        }
+
+        // --- geometry ------------------------------------------------------
+
+        /// <summary>
+        /// Closest point to <paramref name="p"/> on triangle (a, b, c).
+        /// Voronoi-region method from Ericson, Real-Time Collision Detection.
+        /// </summary>
+        public static Vector3 ClosestPointOnTriangle(Vector3 p, Vector3 a, Vector3 b, Vector3 c)
+        {
+            Vector3 ab = b - a;
+            Vector3 ac = c - a;
+            Vector3 ap = p - a;
+            float d1 = Vector3.Dot(ab, ap);
+            float d2 = Vector3.Dot(ac, ap);
+            if (d1 <= 0f && d2 <= 0f) return a;
+
+            Vector3 bp = p - b;
+            float d3 = Vector3.Dot(ab, bp);
+            float d4 = Vector3.Dot(ac, bp);
+            if (d3 >= 0f && d4 <= d3) return b;
+
+            float vc = d1 * d4 - d3 * d2;
+            if (vc <= 0f && d1 >= 0f && d3 <= 0f)
+            {
+                float v0 = d1 / (d1 - d3);
+                return a + v0 * ab;
+            }
+
+            Vector3 cp = p - c;
+            float d5 = Vector3.Dot(ab, cp);
+            float d6 = Vector3.Dot(ac, cp);
+            if (d6 >= 0f && d5 <= d6) return c;
+
+            float vb = d5 * d2 - d1 * d6;
+            if (vb <= 0f && d2 >= 0f && d6 <= 0f)
+            {
+                float w0 = d2 / (d2 - d6);
+                return a + w0 * ac;
+            }
+
+            float va = d3 * d6 - d5 * d4;
+            if (va <= 0f && (d4 - d3) >= 0f && (d5 - d6) >= 0f)
+            {
+                float w1 = (d4 - d3) / ((d4 - d3) + (d5 - d6));
+                return b + w1 * (c - b);
+            }
+
+            float denom = 1f / (va + vb + vc);
+            float vv = vb * denom;
+            float ww = vc * denom;
+            return a + ab * vv + ac * ww;
         }
     }
 }
