@@ -16,7 +16,21 @@ namespace VRClothDeclipper
         {
             public List<ClothSnapshot> cloth;
             public List<BodyCapsule> capsules;
+
+            /// <summary>
+            /// The body as the v2 core's single representation (S2 bridge,
+            /// docs/REARCHITECTURE.md §2 柱2) — what detection, preflight and
+            /// the projected solver ran against.
+            /// </summary>
+            public Declipper.Core.Sdf.ISignedDistanceField body;
+
+            /// <summary>
+            /// The same body through the legacy v1 contract (an adapter over
+            /// <see cref="body"/>), for IBodyCollider consumers — the coarse
+            /// solver until S3 deletes it.
+            /// </summary>
             public IBodyCollider collider;
+
             public string backend;
             public List<PenetrationHit> hits;
             public PreflightReport[] reports;
@@ -99,21 +113,21 @@ namespace VRClothDeclipper
                 bodyCoverage = BodyModelConfidence.Coverage(outcome.estimated);
                 bodyModelLowConfidence = BodyModelConfidence.IsLowConfidence(outcome.estimated);
             }
-            // Pick the collision backend: the mesh-SDF collider when requested
-            // and a body mesh is available, otherwise the bone capsules
-            // (docs/DESIGN.md §6). Detection differs (the mesh has no capsule
-            // index); preflight and the solver run through the IBodyCollider
-            // abstraction either way.
-            IBodyCollider collider;
+            // Pick the collision backend: the mesh SDF when requested and a
+            // body mesh is available, otherwise the bone capsules
+            // (docs/DESIGN.md §6). Both are built as the v2 core's single SDF
+            // representation (S2 bridge); detection, preflight and the
+            // projected solver run through the v2 core, and the legacy coarse
+            // solver sees the same SDF through the IBodyCollider adapter.
             List<PenetrationHit> hits;
             string backend;
-            MeshSdfCollider sdf = fitter.useMeshSdfCollider ? VRClothBodySdfBuilder.Build(fitter) : null;
-            if (sdf != null)
+            Declipper.Core.Sdf.ISignedDistanceField body =
+                fitter.useMeshSdfCollider ? VRClothV2Bridge.BuildBodySdf(fitter) : null;
+            if (body != null)
             {
-                collider = sdf;
                 backend = "mesh";
                 VRClothDebugVisualizer.SetCapsules(System.Array.Empty<BodyCapsule>());
-                hits = VRClothPenetrationDetector.Detect(cloth, collider, fitter.margin);
+                hits = VRClothV2Bridge.Detect(cloth, body, null, fitter.margin);
             }
             else
             {
@@ -121,11 +135,12 @@ namespace VRClothDeclipper
                 {
                     Debug.LogWarning("[VRClothDeclipper] Mesh-SDF collider unavailable — falling back to bone capsules for this run.");
                 }
-                collider = new CapsuleBodyCollider(capsules);
+                body = VRClothV2Bridge.BuildCapsuleSdf(capsules);
                 backend = "capsule";
                 VRClothDebugVisualizer.SetCapsules(capsules);
-                hits = VRClothPenetrationDetector.Detect(cloth, capsules, fitter.margin);
+                hits = VRClothV2Bridge.Detect(cloth, body, capsules, fitter.margin);
             }
+            IBodyCollider collider = new VRClothV2Bridge.SdfBodyCollider(body);
             VRClothDebugVisualizer.SetHits(hits);
             if (verbose) Debug.Log($"[VRClothDeclipper] Detected {hits.Count} penetrating vertices (margin {fitter.margin:F3} m, {backend} backend).");
 
@@ -135,8 +150,7 @@ namespace VRClothDeclipper
             for (int i = 0; i < cloth.Count; i++)
             {
                 var snapshot = cloth[i];
-                reports[i] = PreflightDiagnostic.Evaluate(
-                    snapshot.worldVertices, snapshot.triangles, snapshot.hits, collider, fitter.margin);
+                reports[i] = VRClothV2Bridge.Evaluate(snapshot, body, fitter.margin);
                 if (verbose) Debug.Log(FormatPreflight(snapshot.renderer.name, reports[i]));
             }
 
@@ -159,6 +173,7 @@ namespace VRClothDeclipper
             {
                 cloth = cloth,
                 capsules = capsules,
+                body = body,
                 collider = collider,
                 backend = backend,
                 hits = hits,
@@ -198,7 +213,7 @@ namespace VRClothDeclipper
                 }
                 var snapshot = pf.cloth[i];
                 var result = fitter.useProjectedSolver
-                    ? PenetrationSolver.SolveProjected(snapshot.worldVertices, snapshot.triangles, pf.collider, fitter.margin)
+                    ? VRClothV2Bridge.SolveProjected(snapshot.worldVertices, snapshot.triangles, pf.body, fitter.margin)
                     : PenetrationSolver.Solve(snapshot.worldVertices, snapshot.triangles, pf.collider, fitter.margin);
                 if (result.initialHitCount > 0)
                 {
@@ -233,9 +248,10 @@ namespace VRClothDeclipper
             }
 
             var solve = new VRClothRunLog.SolveSummary();
-            // Pick the solver: the prototype normal/tangent-split SolveProjected
-            // when requested, otherwise the current coarse-pass Solve. Both run
-            // through the IBodyCollider abstraction and return the same Result
+            // Pick the solver: the normal/tangent-split projected solver (the
+            // v2 core, S2 bridge) when requested, otherwise the legacy
+            // coarse-pass Solve — which runs against the same v2 SDF through
+            // the IBodyCollider adapter. Both return the same Result
             // (docs/DEFORMATION_METHODS.md §3.1).
             string solverName = fitter.useProjectedSolver ? "projected" : "coarse";
             if (hits.Count > 0)
@@ -249,7 +265,7 @@ namespace VRClothDeclipper
                     }
                     var snapshot = cloth[i];
                     var result = fitter.useProjectedSolver
-                        ? PenetrationSolver.SolveProjected(snapshot.worldVertices, snapshot.triangles, pf.collider, fitter.margin)
+                        ? VRClothV2Bridge.SolveProjected(snapshot.worldVertices, snapshot.triangles, pf.body, fitter.margin)
                         : PenetrationSolver.Solve(snapshot.worldVertices, snapshot.triangles, pf.collider, fitter.margin);
                     solve.passes = Mathf.Max(solve.passes, result.passes);
                     solve.remainingPenetrating += result.finalHitCount;

@@ -17,11 +17,22 @@ namespace VRClothDeclipper
     /// </summary>
     public static class VRClothBodySdfBuilder
     {
-        public static MeshSdfCollider Build(VRClothDeclipper fitter)
+        /// <summary>
+        /// Gathers every resolved body part into one world-space vertex/triangle
+        /// soup. Shared by the v1 collider build (<see cref="Build"/>) and the
+        /// v2 bridge (<see cref="VRClothV2Bridge.BuildBodySdf"/>) so both see
+        /// the identical body. False (with a warning) when no usable body mesh
+        /// exists.
+        /// </summary>
+        public static bool TryCollectBodyMesh(
+            VRClothDeclipper fitter, out Vector3[] vertices, out int[] triangles, out List<string> usedNames)
         {
+            vertices = null;
+            triangles = null;
+            usedNames = null;
             if (fitter == null)
             {
-                return null;
+                return false;
             }
 
             // A split body (torso/head/hair as separate meshes) has no single
@@ -38,7 +49,7 @@ namespace VRClothDeclipper
             // positions; concatenating shifts each part's indices by the running
             // vertex offset.
             var worldVertices = new List<Vector3>();
-            var triangles = new List<int>();
+            var tris = new List<int>();
             var used = new List<string>();
             foreach (var body in bodies)
             {
@@ -48,24 +59,37 @@ namespace VRClothDeclipper
                 if (bv.Length == 0 || bt.Length == 0) continue;
                 int offset = worldVertices.Count;
                 worldVertices.AddRange(bv);
-                for (int i = 0; i < bt.Length; i++) triangles.Add(bt[i] + offset);
+                for (int i = 0; i < bt.Length; i++) tris.Add(bt[i] + offset);
                 used.Add(body.name);
             }
 
-            if (worldVertices.Count == 0 || triangles.Count == 0)
+            if (worldVertices.Count == 0 || tris.Count == 0)
             {
                 Debug.LogWarning("[VRClothDeclipper] Mesh-SDF collider: body mesh not found — assign 'Body Mesh' on the component, or turn off 'Use Mesh SDF Collider' to fall back to capsules.");
+                return false;
+            }
+
+            vertices = worldVertices.ToArray();
+            triangles = tris.ToArray();
+            usedNames = used;
+            return true;
+        }
+
+        public static MeshSdfCollider Build(VRClothDeclipper fitter)
+        {
+            if (!TryCollectBodyMesh(fitter, out var vertices, out var triangles, out var used))
+            {
                 return null;
             }
 
-            var collider = new MeshSdfCollider(worldVertices.ToArray(), triangles.ToArray());
+            var collider = new MeshSdfCollider(vertices, triangles);
             if (!collider.IsValid)
             {
                 Debug.LogWarning($"[VRClothDeclipper] Mesh-SDF collider: body mesh '{string.Join(", ", used)}' has no triangles — falling back to capsules.");
                 return null;
             }
 
-            Debug.Log($"[VRClothDeclipper] Mesh-SDF collider built from {used.Count} mesh(es) ({worldVertices.Count} verts, {triangles.Count / 3} tris): {string.Join(", ", used)}.");
+            Debug.Log($"[VRClothDeclipper] Mesh-SDF collider built from {used.Count} mesh(es) ({vertices.Length} verts, {triangles.Length / 3} tris): {string.Join(", ", used)}.");
             return collider;
         }
     }

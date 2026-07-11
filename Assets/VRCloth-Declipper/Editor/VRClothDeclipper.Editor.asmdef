@@ -4,6 +4,7 @@
     "references": [
         "VRClothDeclipper.Core",
         "VRClothDeclipper.Runtime",
+        "Declipper.Core",
         "nadena.dev.ndmf"
     ],
     "includePlatforms": [
