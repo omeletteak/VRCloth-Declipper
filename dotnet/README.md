@@ -2,9 +2,9 @@
 
 v2 再設計([docs/REARCHITECTURE.md](../docs/REARCHITECTURE.md))の柱1「UnityEngine 完全非依存の幾何コア」の実装場所。数学は `System.Numerics.Vector3`、テストは `dotnet test` で秒単位に回る。Unity 側は将来(S2)このソースを共有コンパイルするため、**`netstandard2.1` / C# 9 を超える言語機能・API は使わないこと**(Unity 2022.3 互換の上限)。
 
-## 状態(2026-07-04, S1 移植＋ゴールデンゲート完了)
+## 状態(2026-07-05, S1 移植＋ゴールデンゲート完了)
 
-スタブは全て実装済み、v1↔v2 ゴールデンゲートも稼働。`dotnet test` は **29件緑・秒未満**(dotnet SDK 9.0 で検証、`src` は `netstandard2.1`/C# 9 を維持):
+スタブは全て実装済み、v1↔v2 ゴールデンゲートも稼働。`dotnet test` は **30件緑・秒未満**(dotnet SDK 9.0 で検証、`src` は `netstandard2.1`/C# 9 を維持):
 
 ```bash
 cd dotnet && dotnet test
@@ -57,16 +57,17 @@ dotnet/
       ISignedDistanceField.cs   実装済  v2 の唯一の体表現契約(距離+勾配の一括 Sample)
       Capsule.cs                実装済  カプセル解析解(v1 BodyCapsule の移植)
       CapsuleSetSdf.cs          実装済  カプセル合成(min-union)
-      MeshSdf.cs                スタブ  BVH 最近接 + Barnes–Hut 巻き数(S1 の最重量級)
+      MeshSdf.cs                実装済  BVH 最近接 + Barnes–Hut 巻き数(S1 の最重量級)
     Surface/
-      SurfaceBinding.cs         契約のみ 体表面対応(binding)— v2 の中核プリミティブ
+      SurfaceBinding.cs         契約    体表面対応(binding)— v2 の中核プリミティブ
+      CapsuleSurface.cs         実装済  IBodySurface のカプセル実装(round-trip 恒等)
     Solver/
-      PenetrationDetection.cs   スタブ  検出(単一パス、カプセル専用経路は作らない)
-      VertexAdjacency.cs        スタブ  隣接(シーム溶接の意味論を v1 から保存)
-      LaplacianSmoothing.cs     スタブ  変位場の平滑化(位置は触らない)
-      ProjectedSolver.cs        スタブ  唯一のソルバ(制約付き最適化、coarse は移植しない)
+      PenetrationDetection.cs   実装済  検出(単一パス、カプセル専用経路は作らない)
+      VertexAdjacency.cs        実装済  隣接(シーム溶接の意味論を v1 から保存)
+      LaplacianSmoothing.cs     実装済  変位場の平滑化(位置は触らない)
+      ProjectedSolver.cs        実装済  唯一のソルバ(制約付き最適化、coarse は移植しない)
     Diagnostics/
-      Preflight.cs              スタブ  緑/黄/赤判定 + RedCause 名指し
+      Preflight.cs              実装済  緑/黄/赤判定 + RedCause 名指し
   tests/Declipper.Core.Tests/   NUnit(net8.0)
 ```
 
