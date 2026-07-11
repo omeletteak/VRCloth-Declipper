@@ -57,10 +57,22 @@ v1 の二本立て(coarse `Solve` / `SolveProjected`)は後者が正解に収束
 |---|---|---|
 | **S0** | スケルトン — `dotnet/` に純 .NET コアの契約(インターフェース・型・アルゴリズム仕様の XML doc)と最小テストを配置 | landed(2026-07-03、本書と同時) |
 | **S1** | 幾何コアの移植 — v1 Core の数学(カプセル SDF・MeshSdf の BVH+巻き数・検出・平滑化・projected ソルバ・プリフライト)を `dotnet/` へ移植。**ゴールデンテスト必須**: 同一入力に対し v1(Unity)と v2(.NET)が同一出力を返すことを、v1 から吐いた固定フィクスチャで固定してから置換する。フィクスチャの入力は合成メッシュか再配布自由な基準マネキン(ROADMAP フェーズ5)に限る — 購入アセット由来の頂点データは public リポジトリにコミットできない(No Cache 原則) | landed(2026-07-05、移植＋ゴールデンゲート稼働。詳細は [dotnet/README.md](../dotnet/README.md)) |
-| **S2** | Unity アダプタ — 同一ソースを Unity にも食わせる(方式は csproj の source-share か UPM ローカルパッケージ、S2 冒頭で決定)。既存 Editor 層の呼び出しを段階的に v2 コアへ差し替え | 未着手 |
+| **S2** | Unity アダプタ — 同一ソースを Unity にも食わせる(方式は下記「S2 方式決定」)。既存 Editor 層の呼び出しを段階的に v2 コアへ差し替え | 着手(2026-07-11、方式決定＋source-share 配線) |
 | **S3** | 二重経路の削除 — coarse `Solve`、カプセル専用検出パス、`IBodyCollider` の旧契約を削除。EditMode テストは Unity 統合(キャプチャ・書き戻し・NDMF・実スキニング整合)だけに縮小 | 未着手 |
 
 移行中の不変条件: **各段階の終わりで v1 パイプラインは常に動作する**(ビッグバン置換はしない)。ゴールデンテストが通るまで v1 コードは削除しない。
+
+### S2 方式決定(2026-07-11)
+
+**リポジトリ内 `Packages/` の埋め込み UPM パッケージを正本にした source-share** を採る。コアのソースは `Packages/dev.omelette_ak.vrcloth-declipper.core/Runtime/` に置き、Unity はネイティブにコンパイル、dotnet 側は `Declipper.Core.csproj` の `<Compile Include>` で同一ファイルをリンクコンパイルする(テストループは `dotnet test` のまま秒未満)。
+
+選定理由: (1) Unity は `Assets/`・`Packages/` 配下しかコンパイルできないため正本は Unity 世界に置くしかなく、その中でパッケージは最終的な配布単位(VPM/VCC)と一致する — 本番プロジェクトの埋め込みパッケージ運用とも同型。(2) MSBuild は任意パスをリンクできるので dotnet 側の配線は csproj 1 箇所で済む。(3) コピー・symlink 同期を排除できる(同期が存在する場所に事故が集まる)。
+
+守るべきガード(近隣プロジェクト modular-avatar-resonite の 2025 年 DLL 管理問題からの教訓):
+
+- **コア本体は NuGet 依存ゼロを厳守** — 依存を 1 つ足すとその DLL を Unity へ運ぶ成果物管理(`Managed/` 方式)が再来する。テスト専用依存(System.Text.Json 等)は Unity に行かないので可
+- **ビルド成果物(bin/obj)を Unity 可視領域に置かない** — csproj は `dotnet/` 側に残し出力もそちらに落とす。同一型の DLL を Unity が二重に拾うと型衝突する
+- **パッケージ名パスをハードコードしない** — Editor スクリプトからのパス解決は Package Manager API / `AssetDatabase` 経由にする
 
 ## §5 スケルトンと実装順
 

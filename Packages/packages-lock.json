@@ -229,6 +229,12 @@
         "com.unity.ugui": "1.0.0"
       }
     },
+    "dev.omelette_ak.vrcloth-declipper.core": {
+      "version": "file:dev.omelette_ak.vrcloth-declipper.core",
+      "depth": 0,
+      "source": "embedded",
+      "dependencies": {}
+    },
     "jp.lilxyzw.liltoon": {
       "version": "file:jp.lilxyzw.liltoon",
       "depth": 0,

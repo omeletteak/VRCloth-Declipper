@@ -49,10 +49,14 @@ v1↔v2 等価ゲートが稼働(§4「ゴールデンテストが通るまで v
 
 ## レイアウト
 
+**S2 方式決定(2026-07-11、[docs/REARCHITECTURE.md](../docs/REARCHITECTURE.md) §4)以降、コアソースの正本は Unity 埋め込みパッケージ側**にあり、この `dotnet/` は csproj・テスト・fixtures の家。`Declipper.Core.csproj` が `<Compile Include>` で同一ソースをリンクコンパイルする(bin/obj はこちら側に落ち、Unity 可視領域を汚さない)。
+
 ```
-dotnet/
-  Declipper.sln
-  src/Declipper.Core/
+Packages/dev.omelette_ak.vrcloth-declipper.core/   ← ソースの正本(Unity がネイティブにコンパイル)
+  package.json
+  Runtime/
+    Declipper.Core.asmdef     noEngineReferences=true(UnityEngine 参照を構造的に禁止)
+    csc.rsp                   -nullable:enable(csproj の Nullable enable と揃える)
     Sdf/
       ISignedDistanceField.cs   実装済  v2 の唯一の体表現契約(距離+勾配の一括 Sample)
       Capsule.cs                実装済  カプセル解析解(v1 BodyCapsule の移植)
@@ -68,6 +72,10 @@ dotnet/
       ProjectedSolver.cs        実装済  唯一のソルバ(制約付き最適化、coarse は移植しない)
     Diagnostics/
       Preflight.cs              実装済  緑/黄/赤判定 + RedCause 名指し
+
+dotnet/
+  Declipper.sln
+  src/Declipper.Core/           csproj のみ(上記 Runtime/ をリンクコンパイル)
   tests/Declipper.Core.Tests/   NUnit(net8.0)
 ```
 

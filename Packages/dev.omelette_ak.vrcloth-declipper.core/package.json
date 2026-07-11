@@ -1,0 +1,10 @@
+{
+  "name": "dev.omelette_ak.vrcloth-declipper.core",
+  "displayName": "VRCloth Declipper Core (v2)",
+  "version": "0.1.0",
+  "unity": "2022.3",
+  "description": "UnityEngine 非依存の幾何コア (v2)。System.Numerics ベース。dotnet/ 側と source-share され、正本はこのパッケージ (docs/REARCHITECTURE.md §4 S2 方式決定)。",
+  "author": {
+    "name": "omelette_ak"
+  }
+}

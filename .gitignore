@@ -92,6 +92,9 @@ crash.log
 # contents (VRChat SDK etc.) must never be committed (redistribution
 # is prohibited by their licenses).
 /Packages/*/
+# …except our own embedded package: the canonical v2 core sources
+# (docs/REARCHITECTURE.md §4 S2) live here and MUST be tracked.
+!/Packages/dev.omelette_ak.vrcloth-declipper.core/
 
 # Unity editor log accidentally committed at the root
 /Editor.log

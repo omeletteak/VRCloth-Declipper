@@ -14,4 +14,11 @@
     <NoWarn>$(NoWarn);CS1591</NoWarn>
   </PropertyGroup>
 
+  <!-- source-share(REARCHITECTURE §4 S2 方式決定): 正本は Unity 埋め込みパッケージ側。
+       ここは同一ソースをリンクコンパイルするだけ。bin/obj はこの csproj 側に落ちるため
+       Unity 可視領域を汚さない。 -->
+  <ItemGroup>
+    <Compile Include="../../../Packages/dev.omelette_ak.vrcloth-declipper.core/Runtime/**/*.cs" LinkBase="Core" />
+  </ItemGroup>
+
 </Project>
