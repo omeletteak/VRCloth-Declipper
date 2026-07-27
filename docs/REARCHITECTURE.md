@@ -73,6 +73,8 @@ v1 の二本立て(coarse `Solve` / `SolveProjected`)は後者が正解に収束
 - **コア本体は NuGet 依存ゼロを厳守** — 依存を 1 つ足すとその DLL を Unity へ運ぶ成果物管理(`Managed/` 方式)が再来する。テスト専用依存(System.Text.Json 等)は Unity に行かないので可
 - **ビルド成果物(bin/obj)を Unity 可視領域に置かない** — csproj は `dotnet/` 側に残し出力もそちらに落とす。同一型の DLL を Unity が二重に拾うと型衝突する
 - **パッケージ名パスをハードコードしない** — Editor スクリプトからのパス解決は Package Manager API / `AssetDatabase` 経由にする
+- **リポジトリ外の検証環境へは junction を張り足す** — この方式が同期を排除するのは開発リポジトリの内側だけで、リポジトリ外の Unity プロジェクト(GUI 検証用の test project・実機 E2E の本番プロジェクト)には届かない。両者はツールを `Assets/VRCloth-Declipper` への junction 1 本で参照しているため、**正本にトップレベル単位が増えるたびに対応する junction を追加する**(2026-07-27、両環境の `Packages/` へ `dev.omelette_ak.vrcloth-declipper.core` の junction を追加してコンパイル通過を確認)。張り忘れると Editor asmdef の `Declipper.Core` 参照が解決できず CS0246 でツールが丸ごと落ちる — この不整合は開発リポジトリ単体のテストでは検出できない
+- **配布単位も同じ穴を持つ** — VPM 配布パッケージ `Assets/VRCloth-Declipper/package.json` は core への依存を持たないので、S3 でパッケージへ吸収するまでの間にリリースを切る場合は、core を VPM listing に載せて `vpmDependencies` へ追記する必要がある
 
 ## §5 スケルトンと実装順
 
