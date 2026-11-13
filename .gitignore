@@ -104,6 +104,7 @@ __pycache__/
 # v2 pure .NET core (dotnet/) build artifacts
 dotnet/**/bin/
 dotnet/**/obj/
+dotnet/**/TestResults/
 # but the v2 core projects are real sources, not Unity-generated
 !dotnet/**/*.csproj
 !dotnet/*.sln
