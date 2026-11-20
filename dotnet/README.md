@@ -10,6 +10,8 @@ v2 再設計([docs/REARCHITECTURE.md](../docs/REARCHITECTURE.md))の柱1「Unity
 cd dotnet && dotnet test
 ```
 
+CI: `dotnet/**` を変更する push(main)/PR で [`.github/workflows/dotnet-test.yml`](../.github/workflows/dotnet-test.yml) が同じテストを Release 構成で回す(dotnet SDK 8.0)。
+
 移植済み(構成的/解析的ユニットテストで固定 — 純組合せ・ベクトル論理は v1 golden より厳密):
 
 | ピース | 移植元 | テスト観点 |

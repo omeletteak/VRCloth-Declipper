@@ -1,0 +1,56 @@
+name: dotnet test
+
+# v2 純 .NET コア(dotnet/)の EditMode 非依存テストを回す。
+# Unity 側(Assets/ の v1 Core/Editor/Tests.Editor)は Unity ライセンスと
+# エディタが必要なのでここでは対象外(CLAUDE.md の Unity バッチ手順でローカル実行)。
+on:
+  push:
+    branches: [main]
+    paths:
+      - "dotnet/**"
+      - ".github/workflows/dotnet-test.yml"
+  pull_request:
+    paths:
+      - "dotnet/**"
+      - ".github/workflows/dotnet-test.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: dotnet
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Restore
+        run: dotnet restore
+
+      # src は TreatWarningsAsErrors + netstandard2.1/C# 9 固定なので、
+      # Unity 2022.3 で通らない言語機能の混入はここでビルドエラーになる
+      - name: Build
+        run: dotnet build --no-restore -c Release
+
+      - name: Test
+        run: dotnet test --no-build -c Release --logger "trx;LogFileName=results.trx" --results-directory TestResults
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dotnet-test-results
+          path: dotnet/TestResults/*.trx
+          if-no-files-found: ignore

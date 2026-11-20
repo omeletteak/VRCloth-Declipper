@@ -30,6 +30,7 @@ cd dotnet && dotnet test
 - dotnet SDK 8.0 が必要(未導入なら `curl -sSL https://dot.net/v1/dotnet-install.sh | bash /dev/stdin --channel 8.0`、`~/.dotnet` を PATH へ)
 - 制約: `src/Declipper.Core` は **`netstandard2.1` / C# 9 を超えない**(Unity 2022.3 と将来 source-share するため)
 - 実装状態と S1 の移植順は [dotnet/README.md](dotnet/README.md)
+- CI: `dotnet/**` を変更する push(main)/PR で `.github/workflows/dotnet-test.yml` が restore → Release build → test を自動実行する(Unity 側 EditMode テストは CI 対象外)
 
 ## Architecture Overview
 
